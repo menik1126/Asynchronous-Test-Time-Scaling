@@ -24,35 +24,27 @@ pip install transformers torch numpy tqdm asyncio openai httpx nvtx
 
 ### 1. Launch SGLang Servers
 
-First, start the SGLang servers for inference:
+Start the SGLang servers for inference:
 
 ```bash
-# Launch with default models (DeepSeek-R1-Distill-Llama-8B + QwQ-32B)
 bash launch_sglang_servers.sh
-
-# Or specify custom models and GPUs
-bash launch_sglang_servers.sh \
-    "deepseek-ai/DeepSeek-R1-Distill-Llama-8B" \  # Small model
-    "Qwen/QwQ-32B" \                               # Eval model
-    "0" \                                           # Small model GPU
-    "1,2" \                                         # Eval model GPUs
-    "0.9" \                                         # Memory fraction
-    "2"                                             # Tensor parallel size
 ```
 
-The script will:
-- Launch small model server on port 40000
-- Launch evaluation model server on port 40001
-- Wait for both servers to be ready
-- Save PIDs to `small_model.pid` and `eval_model.pid`
+**Default Configuration:**
+- Small Model: `deepseek-ai/DeepSeek-R1-Distill-Llama-8B` (Port 40000)
+- Eval Model: `Qwen/QwQ-32B` (Port 40001)
+
+**To customize models or GPUs**, edit the configuration variables in `launch_sglang_servers.sh`:
+```bash
+SMALL_MODEL="your-model"
+EVAL_MODEL="your-eval-model"
+SMALL_MODEL_DEVICE="0"
+EVAL_MODEL_DEVICES="1,2"
+```
 
 **To stop servers:**
 ```bash
-# Using saved PIDs
 kill $(cat small_model.pid) $(cat eval_model.pid)
-
-# Or manually
-kill <SMALL_MODEL_PID> <EVAL_MODEL_PID>
 ```
 
 ### 2. Prepare PPL Arrays
