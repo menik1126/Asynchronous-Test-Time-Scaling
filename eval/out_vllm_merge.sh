@@ -1,1 +1,0 @@
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 lm_eval --model vllm --model_args pretrained=simplescaling/s1.1-32B,dtype=float32,tensor_parallel_size=4 --tasks aime25_nofigures --batch_size auto --apply_chat_template --output_path out_vllm --log_samples --gen_kwargs "max_gen_toks=32768,max_tokens_thinking=auto,thinking_n_ignore=1,thinking_n_ignore_str=Wait"
