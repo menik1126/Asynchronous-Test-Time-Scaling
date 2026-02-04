@@ -31,11 +31,24 @@ echo "  - Eval Model:      $EVAL_MODEL (GPU: $EVAL_MODEL_DEVICES, Port: $EVAL_MO
 echo "  - Memory Fraction: $MEM_FRACTION"
 echo "===================================================================================="
 
-# --- Check for wait-for-it.sh ---
-if [ ! -f "./wait-for-it.sh" ]; then
-    echo "Downloading wait-for-it.sh..."
-    wget https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh && chmod +x wait-for-it.sh
-fi
+# --- Function to check if a server is ready ---
+wait_for_server() {
+    local port=$1
+    local server_name=$2
+    echo "Waiting for $server_name on port $port to start..."
+    while true; do
+        # Try to connect to the server health endpoint
+        if curl -s http://localhost:$port/health > /dev/null 2>&1 || \
+           curl -s http://localhost:$port/v1/models > /dev/null 2>&1 || \
+           curl -s http://localhost:$port/get_model_info > /dev/null 2>&1; then
+            echo "✓ $server_name on port $port is ready!"
+            break
+        else
+            echo "  Waiting for $server_name on port $port..."
+            sleep 10  # Wait 10 seconds before retrying
+        fi
+    done
+}
 
 # --- Launch Small Model Server ---
 echo ""
@@ -65,20 +78,9 @@ echo "Logs: eval_model_server.log"
 
 # --- Wait for servers to be ready ---
 echo ""
-echo "Waiting for servers to be ready..."
-./wait-for-it.sh "$SGLANG_HOST:$SMALL_MODEL_PORT" --timeout=300 -- echo "✓ Small model server is ready"
-if [ $? -ne 0 ]; then
-    echo "✗ Small model server failed to start. Check small_model_server.log"
-    kill $SMALL_MODEL_PID $EVAL_MODEL_PID 2>/dev/null
-    exit 1
-fi
-
-./wait-for-it.sh "$SGLANG_HOST:$EVAL_MODEL_PORT" --timeout=300 -- echo "✓ Evaluation model server is ready"
-if [ $? -ne 0 ]; then
-    echo "✗ Evaluation model server failed to start. Check eval_model_server.log"
-    kill $SMALL_MODEL_PID $EVAL_MODEL_PID 2>/dev/null
-    exit 1
-fi
+echo "===================================================================================="
+wait_for_server "$SMALL_MODEL_PORT" "Small model server"
+wait_for_server "$EVAL_MODEL_PORT" "Evaluation model server"
 
 echo ""
 echo "===================================================================================="
