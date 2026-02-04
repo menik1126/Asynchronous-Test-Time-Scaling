@@ -24,32 +24,31 @@ pip install transformers torch numpy tqdm asyncio openai httpx nvtx
 
 ### 1. Start SGLang Servers
 
-First, launch two SGLang servers (small model and evaluation model):
+First, start the SGLang servers for inference:
 
 ```bash
-# Terminal 1: Start small model server (e.g., DeepSeek-R1-Distill-Llama-8B)
-CUDA_VISIBLE_DEVICES=0 python3 -m sglang.launch_server \
-    --model-path deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
-    --tp 1 \
-    --mem-fraction-static 0.9 \
-    --host 0.0.0.0 \
-    --port 40000
+# Start servers with default models (DeepSeek-R1-Distill-Llama-8B + QwQ-32B)
+bash start_servers.sh
 
-# Terminal 2: Start evaluation model server (e.g., QwQ-32B)
-CUDA_VISIBLE_DEVICES=1,2 python3 -m sglang.launch_server \
-    --model-path Qwen/QwQ-32B \
-    --tp 2 \
-    --mem-fraction-static 0.9 \
-    --host 0.0.0.0 \
-    --port 40001
+# Or specify custom models
+bash start_servers.sh "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B" "Qwen/QwQ-32B"
+
+# Configure GPUs (optional)
+SMALL_GPU=0 EVAL_GPU=1,2 bash start_servers.sh
 ```
 
-**Important Notes:**
-- Small model uses port `40000`, evaluation model uses port `40001`
-- Adjust `CUDA_VISIBLE_DEVICES` and `--tp` based on your GPU setup
-- Wait for both servers to be ready before proceeding
+The servers will run on:
+- **Small Model**: `http://127.0.0.1:40000`
+- **Evaluation Model**: `http://127.0.0.1:40001`
 
-### 2. Prepare PPL Arrays
+To stop the servers:
+```bash
+bash stop_servers.sh
+```
+
+**Note**: The `suite_*.sh` scripts automatically start and stop servers, so you don't need to run `start_servers.sh` when using them.
+
+### 2. Prepare PPL Arrays (Optional)
 
 Generate perplexity arrays for conformal calibration:
 
@@ -58,25 +57,18 @@ bash suite_conformal.sh
 ```
 
 This script will automatically:
-- Launch SGLang servers for configured model pairs
+- Launch SGLang servers
 - Compute PPL arrays for the specified datasets
 - Save results to `.npy` files
-
-**Or manually run:**
-
-```bash
-python baseline.py \
-    --small_model_name "deepseek-ai/DeepSeek-R1-Distill-Llama-8B" \
-    --eval_model_name "Qwen/QwQ-32B" \
-    --dataset_name "aime24" \
-    --ppl_array_path "ppls_aime24.npy"
-```
+- Clean up servers
 
 ### 3. Run Evaluation
 
-#### Conformal Prediction Method
+#### Option A: Manual Evaluation (Requires servers running)
 
+**Conformal Prediction Method:**
 ```bash
+# Make sure servers are running first (bash start_servers.sh)
 python ref_conformal.py \
     --small_model_name "deepseek-ai/DeepSeek-R1-Distill-Llama-8B" \
     --eval_model_name "Qwen/QwQ-32B" \
@@ -86,13 +78,21 @@ python ref_conformal.py \
     --eval_model_port 40001
 ```
 
-#### Asynchronous Inference
-
+**Asynchronous Inference:**
 ```bash
+# Make sure servers are running first (bash start_servers.sh)
 python ref_async.py \
     --small_model_name "deepseek-ai/DeepSeek-R1-Distill-Llama-8B" \
     --eval_model_name "Qwen/QwQ-32B" \
     --dataset_name "aime24"
+```
+
+#### Option B: Automated Suite (Handles servers automatically)
+
+```bash
+# Runs complete pipeline: start servers → evaluate → stop servers
+bash suite_async.sh        # Asynchronous evaluation
+bash suite_conformal.sh    # Conformal prediction evaluation
 ```
 
 ## 📊 Supported Datasets
