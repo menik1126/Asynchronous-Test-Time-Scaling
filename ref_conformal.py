@@ -13,19 +13,13 @@ import openai
 import requests
 from tqdm.asyncio import tqdm
 
-# --- Global variables for model clients and tokenizer ---
-# These will be initialized in the main function after parsing arguments.
 small_model = None
 eval_model = None
 small_model_name = ""
 eval_model_name = ""
 tokenizer = None
 
-
 def build_question(question):
-    """
-    Constructs the prompt for the small model based on the question type.
-    """
     if isinstance(question, str):
         return f"""
     Please answer the following problem using step-by-step reasoning.
@@ -49,24 +43,16 @@ def build_question(question):
     C. {question[3]}
     D. {question[4]}
     """
-    return "" # Fallback for unexpected question format
-
+    return ""
 
 def build_small_init_prompt(question):
-    """
-    Constructs the initial system/user prompt for the small model.
-    """
     message = [
         {"role": "system", "content": "You are a math expert."},
         {"role": "user", "content": build_question(question)}
     ]
     return message
 
-
 async def call_small_model(prompt, small_model_max_tokens, temperature):
-    """
-    Asynchronously calls the small model via the OpenAI API.
-    """
     message = build_small_init_prompt(prompt[0])
     global small_model, small_model_name
     response = await asyncio.to_thread(
@@ -79,11 +65,7 @@ async def call_small_model(prompt, small_model_max_tokens, temperature):
     )
     return response.choices[0].message.content
 
-
 def build_eval_prompt(question, history):
-    """
-    Builds the prompt for the evaluation model's PPL calculation.
-    """
     prompts = "\n\n".join([
         f"{history[i]}"
         for i in range(len(history))
@@ -91,15 +73,10 @@ def build_eval_prompt(question, history):
     message = build_question(question) + "\n" + prompts
     return message
 
-
 async def call_eval_model_ppl(prompt, eval_model_port):
-    """
-    Asynchronously calls the evaluation model to get the perplexity (PPL)
-    of the small model's output using a specific API endpoint.
-    """
     global tokenizer
     message = build_eval_prompt(prompt[0], prompt[1])
-    # Remove trailing newlines from the last history item before finding its position
+
     last_history_item = prompt[1][-1].strip('\n')
 
     position = message.find(last_history_item)
@@ -112,7 +89,6 @@ async def call_eval_model_ppl(prompt, eval_model_port):
     sub_message = message[:position]
     logprob_start_len = len(tokenizer.tokenize(sub_message))
 
-    # Make sure we use the correct port for the eval model
     response = requests.post(
         f"http://localhost:{eval_model_port}/generate",
         json={
@@ -134,25 +110,17 @@ async def call_eval_model_ppl(prompt, eval_model_port):
         ppl = math.exp(avg_neg_logprob)
     except (KeyError, IndexError, ValueError) as e:
         print(f"Error parsing response from eval model: {e}")
-        ppl = float('inf') # Return a very high PPL on error
+        ppl = float('inf')
     return ppl
 
-
 async def process_single_problem(problem, small_model_max_tokens, temperature, eval_model_port):
-    """
-    Processes a single problem by calling the small model and then the evaluation model.
-    """
     prompt = [problem, []]
     small_out = await call_small_model(prompt, small_model_max_tokens, temperature)
     prompt[1].append(small_out)
     ppl = await call_eval_model_ppl(prompt, eval_model_port)
     return ppl
 
-
 async def compute_ppl(problems, small_model_max_tokens, ppl_array_path, temperature, eval_model_port):
-    """
-    Runs the PPL computation for a list of problems.
-    """
     all_tasks = [
         asyncio.create_task(
             process_single_problem(
@@ -165,17 +133,12 @@ async def compute_ppl(problems, small_model_max_tokens, ppl_array_path, temperat
         for problem in problems
     ]
 
-    # Use tqdm to display a progress bar
     ppls = await tqdm.gather(*all_tasks, desc="Processing problems")
     print(ppls)
     np.save(ppl_array_path, np.array(ppls))
     return None
 
-
 async def main():
-    """
-    Main function to parse arguments and run the evaluation.
-    """
     parser = argparse.ArgumentParser(description="Run baseline evaluation with customizable models and dataset.")
     parser.add_argument("--small_model_name", type=str, required=True,
                         help="Name of the small model for generating responses.")
@@ -197,25 +160,22 @@ async def main():
                         help="Temperature for the small model generation.")
 
     args = parser.parse_args()
-    
-    # --- Set global variables based on parsed arguments ---
+
     global small_model, eval_model, small_model_name, eval_model_name, tokenizer
     small_model_name = args.small_model_name
     eval_model_name = args.eval_model_name
-    
+
     small_model = openai.Client(base_url=f"http://127.0.0.1:{args.small_model_port}/v1", api_key="None")
     eval_model = openai.Client(base_url=f"http://127.0.0.1:{args.eval_model_port}/v1", api_key="None")
-    
-    # The tokenizer must be from the eval_model_name as it's used for PPL calculation
+
     tokenizer = AutoTokenizer.from_pretrained(args.eval_model_name)
     tokenizer.use_default_system_prompt = True
 
-    # --- Load dataset ---
     repeats = args.sample_size
     context, answer = load_my_dataset(args.dataset_name, repeats)
 
     start_time = time.time()
-    
+
     print(f"Starting evaluation on dataset: {args.dataset_name}")
     print(f"Saving results to: {args.ppl_array_path}")
 
@@ -226,11 +186,10 @@ async def main():
         temperature=args.small_model_temperature,
         eval_model_port=args.eval_model_port,
     )
-    
+
     end_time = time.time()
     elapsed = end_time - start_time
     print(f"Elapsed time: {elapsed:.6f} seconds")
-
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -1,7 +1,6 @@
 from datasets import load_dataset
 import random
 import time
-#from agent import extract_answer, majority_check, anyone_check
 import math
 import numpy as np
 
@@ -64,7 +63,6 @@ def load_aime24(repeat: int, test: bool):
     dataset = load_dataset("simplescaling/aime24_nofigures")
     train_dataset = dataset['train']
     indices = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14]
-    # indices = [0]
     train_dataset = train_dataset.select(indices)
     dataset = train_dataset
 
@@ -80,7 +78,6 @@ def load_aime25(repeat: int, test: bool):
     dataset = load_dataset("simplescaling/aime25_nofigures")
     train_dataset = dataset['train']
     indices = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14]
-    # indices = [0,1,2]
     train_dataset = train_dataset.select(indices)
     dataset = train_dataset
 
@@ -150,8 +147,6 @@ def load_olympiad(repeat: int, test: bool):
         answers.extend(a * repeat)
 
     return problems, answers
-
-    return inputs, labels
 
 def load_my_dataset(name: str, repeat: int = 1, test: bool = True):
     if name == "math500":
