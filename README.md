@@ -22,20 +22,57 @@ pip install transformers torch numpy tqdm asyncio openai httpx nvtx
 
 ## 🚀 Quick Start
 
-### 1. Prepare PPL Arrays
+### 1. Start SGLang Servers
 
-First, generate perplexity arrays for conformal calibration:
+First, launch two SGLang servers (small model and evaluation model):
+
+```bash
+# Terminal 1: Start small model server (e.g., DeepSeek-R1-Distill-Llama-8B)
+CUDA_VISIBLE_DEVICES=0 python3 -m sglang.launch_server \
+    --model-path deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+    --tp 1 \
+    --mem-fraction-static 0.9 \
+    --host 0.0.0.0 \
+    --port 40000
+
+# Terminal 2: Start evaluation model server (e.g., QwQ-32B)
+CUDA_VISIBLE_DEVICES=1,2 python3 -m sglang.launch_server \
+    --model-path Qwen/QwQ-32B \
+    --tp 2 \
+    --mem-fraction-static 0.9 \
+    --host 0.0.0.0 \
+    --port 40001
+```
+
+**Important Notes:**
+- Small model uses port `40000`, evaluation model uses port `40001`
+- Adjust `CUDA_VISIBLE_DEVICES` and `--tp` based on your GPU setup
+- Wait for both servers to be ready before proceeding
+
+### 2. Prepare PPL Arrays
+
+Generate perplexity arrays for conformal calibration:
 
 ```bash
 bash suite_conformal.sh
 ```
 
-This script will:
-- Launch SGLang servers for small and evaluation models
+This script will automatically:
+- Launch SGLang servers for configured model pairs
 - Compute PPL arrays for the specified datasets
 - Save results to `.npy` files
 
-### 2. Run Evaluation
+**Or manually run:**
+
+```bash
+python baseline.py \
+    --small_model_name "deepseek-ai/DeepSeek-R1-Distill-Llama-8B" \
+    --eval_model_name "Qwen/QwQ-32B" \
+    --dataset_name "aime24" \
+    --ppl_array_path "ppls_aime24.npy"
+```
+
+### 3. Run Evaluation
 
 #### Conformal Prediction Method
 
