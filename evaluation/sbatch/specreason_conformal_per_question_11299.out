@@ -1,0 +1,80 @@
+
+CondaError: Run 'conda init' before 'conda activate'
+
+Mon Aug 25 17:19:13 2025       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 550.54.14              Driver Version: 550.54.14      CUDA Version: 12.4     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA A100 80GB PCIe          Off |   00000000:4F:00.0 Off |                    0 |
+| N/A   50C    P0            273W /  300W |   66763MiB /  81920MiB |     99%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+|   1  NVIDIA A100 80GB PCIe          Off |   00000000:52:00.0 Off |                    0 |
+| N/A   28C    P0             43W /  300W |       0MiB /  81920MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+|   2  NVIDIA A100 80GB PCIe          Off |   00000000:56:00.0 Off |                    0 |
+| N/A   27C    P0             63W /  300W |   43627MiB /  81920MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+|   3  NVIDIA A100 80GB PCIe          Off |   00000000:57:00.0 Off |                    0 |
+| N/A   28C    P0             44W /  300W |       0MiB /  81920MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+|   4  NVIDIA A100 80GB PCIe          Off |   00000000:D5:00.0 Off |                    0 |
+| N/A   29C    P0             42W /  300W |       0MiB /  81920MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A   2223691      C   python                                      66754MiB |
+|    2   N/A  N/A   2258570      C   /home/shenhui/miniconda3/bin/python         43618MiB |
++-----------------------------------------------------------------------------------------+
+====================================================================================
+Starting a new run with:
+  - Small Model:     deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
+  - Eval Model:      Qwen/QwQ-32B
+  - Dataset:         aime25
+  - PPL Array Path:  /home/xiongjing/qj/sglang-parallel-test-time-scaling/ppls_aime25_64_qwq_32_r1_1_500_per_question.npy
+====================================================================================
+Starting SGLang server for small model (deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B)...
+Small model server started with PID: 2365048
+Starting SGLang server for evaluation model (Qwen/QwQ-32B)...
+Evaluation model server started with PID: 2365049
+Waiting for SGLang servers to be ready...
+wait-for-it.sh: waiting 300 seconds for 0.0.0.0:40001
+wait-for-it.sh: 0.0.0.0:40001 is available after 69 seconds
+Small model server is up.
+wait-for-it.sh: waiting 300 seconds for 0.0.0.0:40000
+wait-for-it.sh: 0.0.0.0:40000 is available after 39 seconds
+Evaluation model server is up.
+Starting evaluation script...
+Starting evaluation on dataset: aime25
+Saving results to: /home/xiongjing/qj/sglang-parallel-test-time-scaling/ppls_aime25_64_qwq_32_r1_1_500_per_question.npy
+Traceback (most recent call last):
+  File "/home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ref_conformal_per_question.py", line 254, in <module>
+    asyncio.run(main())
+  File "/home/xiongjing/miniconda3/envs/test_sglang/lib/python3.10/asyncio/runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "/home/xiongjing/miniconda3/envs/test_sglang/lib/python3.10/asyncio/base_events.py", line 649, in run_until_complete
+    return future.result()
+  File "/home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ref_conformal_per_question.py", line 240, in main
+    await compute_ppl(
+  File "/home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ref_conformal_per_question.py", line 168, in compute_ppl
+    all_tasks = [
+  File "/home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ref_conformal_per_question.py", line 169, in <listcomp>
+    asyncio.create_task(process_with_semaphore(i // args.sample_size, problem))
+NameError: name 'args' is not defined
+Evaluation script for this run encountered an error.
+Killing SGLang servers with PIDs: 2365048 and 2365049...
+suite_conformal_per_question.sh: line 60: 2365048 Killed                  CUDA_VISIBLE_DEVICES=$SMALL_MODEL_DEVICE python3 -m sglang.launch_server --model-path "$SMALL_MODEL" --tp 1 --mem-fraction-static 0.9 --host "$SGLANG_HOST" --port "$SMALL_MODEL_PORT" > "$SMALL_MODEL_LOG" 2>&1
+suite_conformal_per_question.sh: line 60: 2365049 Killed                  CUDA_VISIBLE_DEVICES=$EVAL_MODEL_DEVICES python3 -m sglang.launch_server --model-path "$EVAL_MODEL" --tp 2 --mem-fraction-static 0.9 --host "$SGLANG_HOST" --port "$EVAL_MODEL_PORT" > "$EVAL_MODEL_LOG" 2>&1
+All evaluation runs have been completed.
