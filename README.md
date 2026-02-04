@@ -84,10 +84,10 @@ Edit variables in shell scripts to customize:
 ## 📄 Citation
 
 ```bibtex
-@article{atts2025,
+@article{xiong2025atts,
   title={ATTS: Asynchronous Test-Time Scaling via Conformal Prediction},
-  author={},
-  journal={arXiv preprint arXiv:2503.00031},
+  author={Xiong, Jing and Chen, Qiujiang and Ye, Fanghua and Wan, Zhongwei and Zheng, Chuanyang and Zhao, Chenyang and Shen, Hui and Li, Alexander Hanbo and Tao, Chaofan and Tan, Haochen and others},
+  journal={arXiv preprint arXiv:2509.15148},
   year={2025}
 }
 ```
