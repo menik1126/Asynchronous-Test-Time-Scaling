@@ -8,23 +8,16 @@ from async_agent import anyone_check
 import asyncio
 
 async def compute_accuracy_from_files(output_dir, dataset_name, repeats):
-    """
-    Computes the accuracy by loading results from JSON files and comparing with the dataset's answers.
-    """
-    # Load ground truth answers from the dataset
     print(f"Loading ground truth answers from dataset: {dataset_name}...")
     _, all_answers = load_my_dataset(dataset_name, repeats)
     total_problems = len(all_answers) // repeats
     
-    # Check if the results directory exists
     if not os.path.isdir(output_dir):
         print(f"Error: Output directory '{output_dir}' not found.")
         return
 
-    # Find all result files and sort them by problem index
     result_files = [f for f in os.listdir(output_dir) if f.startswith("problem_") and f.endswith(".json")]
     
-    # Sort files numerically based on their index (e.g., problem_0001.json)
     result_files.sort(key=lambda f: int(f.split('_')[1].split('.')[0]))
 
     if not result_files:
@@ -33,14 +26,12 @@ async def compute_accuracy_from_files(output_dir, dataset_name, repeats):
 
     generated_answers = []
     
-    # Extract answers from each JSON file
     print("Extracting generated answers from result files...")
     for filename in tqdm(result_files, desc="Processing result files"):
         file_path = os.path.join(output_dir, filename)
         with open(file_path, 'r', encoding='utf-8') as f:
             try:
                 data = json.load(f)
-                # Ensure the 'final_answer' key exists
                 if 'final_answer' in data:
                     generated_answers.append(data['final_answer'])
                 else:
@@ -50,12 +41,10 @@ async def compute_accuracy_from_files(output_dir, dataset_name, repeats):
                 print(f"Error: Failed to decode JSON from {filename}. Skipping.")
                 generated_answers.append("invalid")
 
-    # Group generated answers by problem and compute the score
     right_count = 0
     
     if len(generated_answers) != len(all_answers):
         print(f"Warning: Number of generated answers ({len(generated_answers)}) does not match number of problems in dataset ({len(all_answers)}).")
-        # Proceed with a truncated list to avoid errors if a run was incomplete
         min_len = min(len(generated_answers), len(all_answers))
         generated_answers = generated_answers[:min_len]
         all_answers = all_answers[:min_len]
@@ -65,12 +54,9 @@ async def compute_accuracy_from_files(output_dir, dataset_name, repeats):
         start = i * repeats
         end = (i + 1) * repeats
         
-        # Get the generated answers for this problem group
         outputs = generated_answers[start:end]
-        # Get the single correct answer for this problem group
         correct_answer = all_answers[start]
 
-        # Use the anyone_check function to determine if any generated answer is correct
         ans_status = await anyone_check(correct_answer, outputs)
         if ans_status == "Match":
             right_count += 1
@@ -93,5 +79,4 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
 
-    # Run the accuracy computation
     asyncio.run(compute_accuracy_from_files(args.output_dir, args.dataset_name, args.repeats))

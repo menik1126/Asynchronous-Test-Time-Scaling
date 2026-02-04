@@ -5,10 +5,11 @@ import os
 import time
 import httpx
 import random
+import re
 from transformers import AutoTokenizer
 from tqdm import tqdm
 from dataset import load_my_dataset
-from agent import extract_answer, majority_check, anyone_check
+from async_agent import anyone_check
 
 # Global variables (unchanged from your code)
 client_small = None
@@ -149,6 +150,24 @@ async def generate_and_evaluate_task(conv_data, turn, small_model_max_tokens, ev
         'eval_output': eval_out,
         'score': len(eval_out) + random.randint(0, 100) # Mock score based on evaluation output
     }
+
+async def extract_answer(history):
+    answer = "invalid"
+    temp = "\n\n".join([
+        f"{history[i]}"
+        for i in range(len(history))
+    ])
+
+    matches = re.findall(r"\\boxed\{(.*?)\}", temp)
+    if matches:
+        answer = matches[-1]
+    else:
+        pattern = re.compile(r"ANSWER:\s+([A-Z])", re.IGNORECASE)
+        matches = pattern.findall(temp)
+        if matches:
+            answer = matches[-1]
+
+    return answer
 
 async def process_problem_group_async(problems, small_model_max_tokens, evalator_max_tokens, turns, start_idx, small_model_port, eval_model_port, output_dir, debug_mode, repeats, takeover_budget):
     """

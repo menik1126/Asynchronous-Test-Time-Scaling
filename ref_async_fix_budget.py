@@ -13,7 +13,7 @@ from tqdm import tqdm as sync_tqdm
 
 from transformers import AutoTokenizer
 from dataset import load_my_dataset
-from agent import anyone_check  # 修正导入
+from async_agent import anyone_check
 
 # --- [Original code for global variables and helper functions goes here, unchanged] ---
 
@@ -242,7 +242,7 @@ async def compute_score(results, answers, repeats):
         correct_answer = answers[start]
         print(f"Generated answers: {outputs}")
         print(f"Correct answers: {correct_answer}")
-        ans = anyone_check(correct_answer, outputs)
+        ans = await anyone_check(correct_answer, outputs)
         print(ans)
         if ans == "Match":
             right += 1

@@ -1,20 +1,10 @@
 from openai import AsyncOpenAI, APITimeoutError
 import asyncio
 import logging
-import os
 
-# # 配置日志，便于调试
-# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-openai_key = "sk-0xGYTmwLliZxud3UlCOPpyW4V7CV1dQ8SHb1wiNMV0uZJCCM"
-openai_base = 'https://xiaoai.plus/v1'
-openai_model = "gpt-4o-mini"
-
-
-# Note: It's more efficient to create the client once and pass it,
-# but we'll stick to the original code structure for this modification.
-# client = AsyncOpenAI(api_key=openai_key, base_url=openai_base)
-
+openai_key = ""
+openai_base = ""
+openai_model = ""
 
 anyone_check_prompt = """
 You are a mathematics expert with deep understanding of mathematical expressions and notation.
@@ -70,9 +60,8 @@ async def anyone_check(right_answer, answers):
         gt_label=repr(right_answer)
     )
 
-    # 预定义重试参数
-    MAX_RETRIES = 3 # 最大重试次数
-    initial_delay = 1 # 初始等待秒数
+    MAX_RETRIES = 3
+    initial_delay = 1
 
     for i in range(MAX_RETRIES):
         try:
@@ -88,25 +77,21 @@ async def anyone_check(right_answer, answers):
                 max_tokens=max_tokens,
             )
             
-            # 如果 API 调用成功，获取结果并返回
             result = response.choices[0].message.content.strip()
             logging.info(f"API call successful after {i+1} attempt(s).")
             return result
 
         except APITimeoutError as e:
-            # 捕获超时异常
             if i < MAX_RETRIES - 1:
-                delay = initial_delay * (2 ** i) # 指数退避，例如 1s, 2s, 4s
+                delay = initial_delay * (2 ** i)
                 logging.warning(f"Request timed out. Retrying in {delay} seconds...")
                 await asyncio.sleep(delay)
             else:
                 logging.error(f"Request timed out after {MAX_RETRIES} attempts. Giving up.")
-                raise e # 最后一次重试失败，重新抛出异常
+                raise e
         
         except Exception as e:
-            # 捕获其他可能的异常，例如网络错误
             logging.error(f"An unexpected error occurred during API call: {e}")
             raise e
     
-    # 在所有重试都失败的情况下，确保函数不会意外返回
     return ""
