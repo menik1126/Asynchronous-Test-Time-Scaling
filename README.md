@@ -22,33 +22,40 @@ pip install transformers torch numpy tqdm asyncio openai httpx nvtx
 
 ## 🚀 Quick Start
 
-### 1. Start SGLang Servers
+### 1. Launch SGLang Servers
 
 First, start the SGLang servers for inference:
 
 ```bash
-# Start servers with default models (DeepSeek-R1-Distill-Llama-8B + QwQ-32B)
-bash start_servers.sh
+# Launch with default models (DeepSeek-R1-Distill-Llama-8B + QwQ-32B)
+bash launch_sglang_servers.sh
 
-# Or specify custom models
-bash start_servers.sh "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B" "Qwen/QwQ-32B"
-
-# Configure GPUs (optional)
-SMALL_GPU=0 EVAL_GPU=1,2 bash start_servers.sh
+# Or specify custom models and GPUs
+bash launch_sglang_servers.sh \
+    "deepseek-ai/DeepSeek-R1-Distill-Llama-8B" \  # Small model
+    "Qwen/QwQ-32B" \                               # Eval model
+    "0" \                                           # Small model GPU
+    "1,2" \                                         # Eval model GPUs
+    "0.9" \                                         # Memory fraction
+    "2"                                             # Tensor parallel size
 ```
 
-The servers will run on:
-- **Small Model**: `http://127.0.0.1:40000`
-- **Evaluation Model**: `http://127.0.0.1:40001`
+The script will:
+- Launch small model server on port 40000
+- Launch evaluation model server on port 40001
+- Wait for both servers to be ready
+- Save PIDs to `small_model.pid` and `eval_model.pid`
 
-To stop the servers:
+**To stop servers:**
 ```bash
-bash stop_servers.sh
+# Using saved PIDs
+kill $(cat small_model.pid) $(cat eval_model.pid)
+
+# Or manually
+kill <SMALL_MODEL_PID> <EVAL_MODEL_PID>
 ```
 
-**Note**: The `suite_*.sh` scripts automatically start and stop servers, so you don't need to run `start_servers.sh` when using them.
-
-### 2. Prepare PPL Arrays (Optional)
+### 2. Prepare PPL Arrays
 
 Generate perplexity arrays for conformal calibration:
 
@@ -56,19 +63,16 @@ Generate perplexity arrays for conformal calibration:
 bash suite_conformal.sh
 ```
 
-This script will automatically:
-- Launch SGLang servers
+This script will:
+- Launch SGLang servers for small and evaluation models
 - Compute PPL arrays for the specified datasets
 - Save results to `.npy` files
-- Clean up servers
 
 ### 3. Run Evaluation
 
-#### Option A: Manual Evaluation (Requires servers running)
+#### Conformal Prediction Method
 
-**Conformal Prediction Method:**
 ```bash
-# Make sure servers are running first (bash start_servers.sh)
 python ref_conformal.py \
     --small_model_name "deepseek-ai/DeepSeek-R1-Distill-Llama-8B" \
     --eval_model_name "Qwen/QwQ-32B" \
@@ -78,21 +82,13 @@ python ref_conformal.py \
     --eval_model_port 40001
 ```
 
-**Asynchronous Inference:**
+#### Asynchronous Inference
+
 ```bash
-# Make sure servers are running first (bash start_servers.sh)
 python ref_async.py \
     --small_model_name "deepseek-ai/DeepSeek-R1-Distill-Llama-8B" \
     --eval_model_name "Qwen/QwQ-32B" \
     --dataset_name "aime24"
-```
-
-#### Option B: Automated Suite (Handles servers automatically)
-
-```bash
-# Runs complete pipeline: start servers → evaluate → stop servers
-bash suite_async.sh        # Asynchronous evaluation
-bash suite_conformal.sh    # Conformal prediction evaluation
 ```
 
 ## 📊 Supported Datasets
