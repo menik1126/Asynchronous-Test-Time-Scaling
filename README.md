@@ -1,4 +1,4 @@
-<h1 style="font-size: 9em; white-space: nowrap;">[🔥ICLR2026] ATTS: Asynchronous Test-Time Scaling via Conformal Prediction</h1>
+<h1 style="font-size: 9em; white-space: nowrap;">[ICLR2026🔥] ATTS: Asynchronous Test-Time Scaling</h1>
 
 Official implementation of **ATTS: Asynchronous Test-Time Scaling via Conformal Prediction**.
 
