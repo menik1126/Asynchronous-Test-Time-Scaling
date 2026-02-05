@@ -1,4 +1,4 @@
-<h1 style="font-size: 0.4em; white-space: nowrap;">ATTS: Asynchronous Test-Time Scaling via Conformal Prediction</h1>
+<h1 style="font-size: 0.1em; white-space: nowrap;">ATTS: Asynchronous Test-Time Scaling via Conformal Prediction</h1>
 
 Official implementation of **ATTS: Asynchronous Test-Time Scaling via Conformal Prediction**.
 
