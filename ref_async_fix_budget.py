@@ -15,9 +15,6 @@ from transformers import AutoTokenizer
 from dataset import load_my_dataset
 from async_agent import anyone_check
 
-# --- [Original code for global variables and helper functions goes here, unchanged] ---
-
-# Global variables for model clients and tokenizer
 client_small = None
 client_eval = None
 semaphore = asyncio.Semaphore(8)
@@ -27,7 +24,6 @@ eval_model_name = ""
 tokenizer = None
 small_tokenizer = None
 
-# 预选接管位置
 takeover_positions = {}
 
 
@@ -101,7 +97,7 @@ def build_eval_prompt_for_eval(question, history):
 
 async def call_small_model(prompt, turn, max_tokens, idx, port, debug_mode=False):
     if debug_mode:
-        messages = build_debug_prompt()  # 使用debug提示
+        messages = build_debug_prompt()
     else:
         messages = (
             build_small_init_prompt(prompt[0]) if turn == 0 else build_small_inner_prompt(prompt[0], prompt[1])
@@ -143,9 +139,6 @@ async def call_eval_model(prompt, max_tokens, idx, port):
         return resp.json()["choices"][0]["message"]["content"]
 
 
-
-
-
 async def extract_answer(history):
     answer = "invalid"
     temp = "\n\n".join([
@@ -164,21 +157,18 @@ async def extract_answer(history):
 
     return answer
 
-
 async def process_single_problem(problem, small_model_max_tokens, evalator_max_tokens, turns, idx, small_model_port, eval_model_port, output_dir, debug_mode=False, repeats=1):
     prompt = [problem, []]
     answer = "invalid"
     start_time = time.time()
     
-    # 计算问题组索引
     problem_group_idx = idx // repeats
     
     history_log = []
 
     for turn in range(turns):
-        print(f"📊 Problem Group {problem_group_idx} (Sample {idx}) - Turn {turn+1}/{turns}", flush=True)
+        print(f"Problem Group {problem_group_idx} (Sample {idx}) - Turn {turn+1}/{turns}", flush=True)
         small_out = await call_small_model(prompt, turn, small_model_max_tokens, idx, small_model_port, debug_mode)
-        print(f"🔹 小模型输出 (Turn {turn+1}): {small_out[:200]}{'...' if len(small_out) > 200 else ''}")
         history_log.append({"turn": turn, "model": "small", "output": small_out})
         prompt[1].append(small_out)
 
@@ -186,20 +176,17 @@ async def process_single_problem(problem, small_model_max_tokens, evalator_max_t
             print("Small model returned empty output.", flush=True)
             break
 
-        # 使用预选位置控制异步接管
         global takeover_positions
         should_takeover = False
         
-        # 检查当前样本是否在预选的接管位置中
         if turn in takeover_positions and idx in takeover_positions[turn]:
             should_takeover = True
-            print(f"🎯 Turn {turn+1}: 预选接管触发! (Sample {idx} 在预选位置中)", flush=True)
+            print(f"Turn {turn+1}: take over", flush=True)
         else:
-            print(f"⏭️  Turn {turn+1}: 跳过接管 (Sample {idx} 不在预选位置中)", flush=True)
+            print(f"Turn {turn+1}: continue", flush=True)
         
         if should_takeover:
             eval_out = await call_eval_model(prompt, evalator_max_tokens, idx, eval_model_port)
-            print(f"🔸 大模型输出 (Turn {turn+1}): {eval_out[:200]}{'...' if len(eval_out) > 200 else ''}")
             history_log.append({"turn": turn, "model": "eval_generate", "output": eval_out})
             prompt[1].append(eval_out)
 
@@ -227,9 +214,7 @@ async def process_single_problem(problem, small_model_max_tokens, evalator_max_t
     with open(output_filename, 'w', encoding='utf-8') as f:
         json.dump(result_data, f, indent=4)
         
-    # We don't need to return anything, as the result is already saved.
     return ()
-
 
 async def compute_score(results, answers, repeats):
     generated_ans = [ans for ans, _ in results]
@@ -306,19 +291,13 @@ async def main():
     total_unique_problems = len(answer) // args.repeats
     total_samples = len(context)
     
-    # 初始化每个turn的独立接管预算
     global takeover_positions
     max_turns = args.turns
-    random.seed(42)  # 设置随机种子确保可重现
+    random.seed(42)
     for turn_num in range(max_turns):
         takeover_positions[turn_num] = set(random.sample(range(total_samples), min(args.takeover_budget, total_samples)))
-        print(f"🎲 Turn {turn_num+1} 预选接管位置: {sorted(takeover_positions[turn_num])}")
-    
+        print(f"Turn {turn_num+1} take over range: {sorted(takeover_positions[turn_num])}")
 
-    
-    # 最终修正的、正确的断点恢复和分组处理逻辑
-    
-    # 第1步：找出所有已完成的单个采样任务的索引
     processed_sample_indices = set()
     for filename in os.listdir(args.output_dir):
         if filename.startswith("problem_") and filename.endswith(".json"):
@@ -328,7 +307,6 @@ async def main():
             except ValueError:
                 continue
 
-    # 第2步：识别所有需要处理的唯一问题组
     unique_problems_to_process = []
     for unique_idx in range(total_unique_problems):
         start_idx = unique_idx * args.repeats
@@ -341,7 +319,7 @@ async def main():
             unique_problems_to_process.append(unique_idx)
     
     if not unique_problems_to_process:
-        print("所有问题都已完成处理。无需运行新任务。")
+        print("all tasks finish")
         all_results = []
         for idx in range(total_samples):
             filepath = os.path.join(args.output_dir, f"problem_{idx:04d}.json")
@@ -351,20 +329,18 @@ async def main():
         await compute_score(all_results, answer, args.repeats)
         return
 
-    print(f"找到 {len(unique_problems_to_process)} 个需要处理的问题组。正在恢复...")
+    print(f"find {len(unique_problems_to_process)} groups. handling...")
     
     start_time = time.time()
     
-    # 第3步：按"问题组"为单位，只处理组内未完成的采样任务
     for unique_idx in sync_tqdm(unique_problems_to_process, desc="Processing problem groups"):
-        print(f"🔄 Processing Problem Group {unique_idx}")
+        print(f"Processing Problem Group {unique_idx}")
         
         tasks_to_run_for_group = []
         start_sample_idx = unique_idx * args.repeats
         end_sample_idx = start_sample_idx + args.repeats
         
         for sample_idx in range(start_sample_idx, end_sample_idx):
-            # 检查这个采样是否已经完成
             if sample_idx not in processed_sample_indices:
                 problem = context[sample_idx]
                 task = asyncio.create_task(
@@ -383,22 +359,17 @@ async def main():
                 )
                 tasks_to_run_for_group.append(task)
         
-        # 在这里执行本组内的所有任务，并等待它们全部完成
         if tasks_to_run_for_group:
             await tqdm.gather(*tasks_to_run_for_group, desc=f"Group {unique_idx} samples")
-            # 注意：这里不需要收集返回值，因为保存操作在任务内部已经完成
             
     end_time = time.time()
-    print(f"耗时: {end_time - start_time:.3f} s")
-    
-    # 最后，在所有任务都完成之后，我们才去计算最终分数
-    print("\n尝试计算最终分数...")
+    print(f"time: {end_time - start_time:.3f} s")
     
     all_files_exist = True
     for idx in range(total_samples):
         filepath = os.path.join(args.output_dir, f"problem_{idx:04d}.json")
         if not os.path.exists(filepath):
-            print(f"错误：所需结果文件 {filepath} 缺失。无法计算最终分数。")
+            print(f"Error: required result file {filepath} is missing. Final score cannot be computed.")
             all_files_exist = False
             break
             
@@ -411,7 +382,7 @@ async def main():
                 all_results.append((data['final_answer'], data['duration_seconds']))
         await compute_score(all_results, answer, args.repeats)
     else:
-        print("由于结果文件缺失，将不计算最终分数。请重新运行脚本以完成所有任务。")
+        print("Final score will not be computed due to missing result files. Please rerun the script to complete all tasks.")
 
     await client_small.aclose()
     await client_eval.aclose()
