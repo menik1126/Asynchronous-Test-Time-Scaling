@@ -14,9 +14,6 @@ from transformers import AutoTokenizer
 from dataset import load_my_dataset
 from async_agent import anyone_check
 
-# --- [Original code for global variables and helper functions goes here, unchanged] ---
-
-# Global variables for model clients and tokenizer
 client_small = None
 client_eval = None
 small_model_semaphore = None
@@ -107,7 +104,6 @@ async def call_small_model(prompt, turn, max_tokens, idx, port, temperature):
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
-        # "stop": ["\n\n"],
     }
     
     async with small_model_semaphore:
@@ -127,7 +123,6 @@ async def call_eval_model(prompt, max_tokens, idx, port, temperature):
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
-        # "stop": ["\n\n"],
     }
 
     async with eval_model_semaphore:
@@ -153,8 +148,6 @@ async def call_eval_model_ppl(prompt, idx, port):
 
     sub_message = message[:position]
     logprob_start_len = len(tokenizer.tokenize(sub_message))
-    # all_len = len(tokenizer.tokenize(message))
-    # print(f"ppl range is {logprob_start_len} - {all_len}")
     payload = {
         "text": message,
         "sampling_params": {
@@ -253,8 +246,7 @@ async def process_single_problem(problem, small_model_max_tokens, evalator_max_t
     output_filename = os.path.join(output_dir, f"problem_{idx:04d}.json")
     with open(output_filename, 'w', encoding='utf-8') as f:
         json.dump(result_data, f, indent=4)
-        
-    # We don't need to return anything, as the result is already saved.
+
     return ()
 
 
@@ -318,7 +310,6 @@ async def main():
     small_model_name = args.small_model_name
     eval_model_name = args.eval_model_name
     
-    # 根据命令行参数设置并发数量
     small_model_semaphore = asyncio.Semaphore(args.small_model_concurrency)
     eval_model_semaphore = asyncio.Semaphore(args.eval_model_concurrency)
 
@@ -342,9 +333,6 @@ async def main():
     total_unique_problems = len(answer) // args.repeats
     total_samples = len(context)
     
-    # 最终修正的、正确的断点恢复和分组处理逻辑
-    
-    # 第1步：找出所有已完成的单个采样任务的索引
     processed_sample_indices = set()
     for filename in os.listdir(args.output_dir):
         if filename.startswith("problem_") and filename.endswith(".json"):
@@ -354,7 +342,6 @@ async def main():
             except ValueError:
                 continue
 
-    # 第2步：识别所有需要处理的唯一问题组
     unique_problems_to_process = []
     for unique_idx in range(total_unique_problems):
         start_idx = unique_idx * args.repeats
@@ -367,7 +354,7 @@ async def main():
             unique_problems_to_process.append(unique_idx)
     
     if not unique_problems_to_process:
-        print("所有问题都已完成处理。无需运行新任务。")
+        print("all tasks finish")
         all_results = []
         for idx in range(total_samples):
             filepath = os.path.join(args.output_dir, f"problem_{idx:04d}.json")
@@ -377,18 +364,16 @@ async def main():
         await compute_score(all_results, answer, args.repeats)
         return
 
-    print(f"找到 {len(unique_problems_to_process)} 个需要处理的问题组。正在恢复...")
+    print(f"find {len(unique_problems_to_process)} groups. handling...")
     
     start_time = time.time()
     
-    # 第3步：按“问题组”为单位，只处理组内未完成的采样任务
     for unique_idx in sync_tqdm(unique_problems_to_process, desc="Processing problem groups"):
         tasks_to_run_for_group = []
         start_sample_idx = unique_idx * args.repeats
         end_sample_idx = start_sample_idx + args.repeats
         
         for sample_idx in range(start_sample_idx, end_sample_idx):
-            # 检查这个采样是否已经完成
             if sample_idx not in processed_sample_indices:
                 problem = context[sample_idx]
                 task = asyncio.create_task(
@@ -408,22 +393,17 @@ async def main():
                 )
                 tasks_to_run_for_group.append(task)
         
-        # 在这里执行本组内的所有任务，并等待它们全部完成
         if tasks_to_run_for_group:
             await tqdm.gather(*tasks_to_run_for_group, desc=f"Group {unique_idx} samples")
-            # 注意：这里不需要收集返回值，因为保存操作在任务内部已经完成
             
     end_time = time.time()
-    print(f"耗时: {end_time - start_time:.3f} s")
-    
-    # 最后，在所有任务都完成之后，我们才去计算最终分数
-    print("\n尝试计算最终分数...")
+    print(f"time: {end_time - start_time:.3f} s")
     
     all_files_exist = True
     for idx in range(total_samples):
         filepath = os.path.join(args.output_dir, f"problem_{idx:04d}.json")
         if not os.path.exists(filepath):
-            print(f"错误：所需结果文件 {filepath} 缺失。无法计算最终分数。")
+            print(f"Error: required result file {filepath} is missing. Unable to compute the final score.")
             all_files_exist = False
             break
             
@@ -436,7 +416,7 @@ async def main():
                 all_results.append((data['final_answer'], data['duration_seconds']))
         await compute_score(all_results, answer, args.repeats)
     else:
-        print("由于结果文件缺失，将不计算最终分数。请重新运行脚本以完成所有任务。")
+        print("Final score will not be computed due to missing result files. Please rerun the script to complete all tasks.")
 
     await client_small.aclose()
     await client_eval.aclose()

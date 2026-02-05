@@ -6,7 +6,6 @@ from dataset import (
 from transformers import AutoTokenizer
 import math
 import time
-import os
 import numpy as np
 import asyncio
 import openai

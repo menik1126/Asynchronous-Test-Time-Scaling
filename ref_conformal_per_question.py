@@ -6,7 +6,6 @@ from dataset import (
 from transformers import AutoTokenizer
 import math
 import time
-import os
 import numpy as np
 import asyncio
 import openai
@@ -148,9 +147,8 @@ async def compute_ppl(problems, small_model_max_tokens, ppl_array_path, eval_mod
 
     np.save(ppl_array_path, ppls_by_problem)
 
-    print(f"PPL统计信息:")
     for original_problem_idx, ppls in ppls_by_problem.items():
-        print(f"原始问题 {original_problem_idx}: {len(ppls)} 个校准样本, PPL范围: [{min(ppls):.4f}, {max(ppls):.4f}]")
+        print(f"problem {original_problem_idx}: {len(ppls)} samples, PPL range: [{min(ppls):.4f}, {max(ppls):.4f}]")
 
     return ppls_by_problem
 
