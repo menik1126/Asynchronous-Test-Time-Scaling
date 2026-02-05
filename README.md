@@ -1,4 +1,4 @@
-<h1 style="font-size: 1.5em; white-space: nowrap;">ATTS: Asynchronous Test-Time Scaling via Conformal Prediction</h1>
+<h1 style="font-size: 1.15em; white-space: nowrap;">ATTS: Asynchronous Test-Time Scaling via Conformal Prediction</h1>
 
 Official implementation of **ATTS: Asynchronous Test-Time Scaling via Conformal Prediction**.
 
@@ -6,7 +6,7 @@ Official implementation of **ATTS: Asynchronous Test-Time Scaling via Conformal 
 
 <div align="center">
   <a href="https://arxiv.org/abs/2509.15148"><img src="https://img.shields.io/badge/arXiv-2509.15148-b31b1b.svg" alt="arXiv" /></a>
-  <a href="https://iclr.cc/Conferences/2026"><img src="https://iclr.cc/static/core/img/iclr-navbar-logo.svg" alt="ICLR 2026" height="20" /></a>
+  <a href="https://iclr.cc/Conferences/2026"><img src="https://iclr.cc/static/core/img/iclr-navbar-logo.svg" alt="ICLR" height="20" style="vertical-align: middle;" /> ICLR 2026</a>
 </div>
 
 ## 🔧 Installation
