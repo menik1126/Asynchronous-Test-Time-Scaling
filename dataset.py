@@ -1,17 +1,18 @@
 from datasets import load_dataset
 import random
 
+
 def load_math500(repeat: int, test: bool):
     if test:
         dataset = load_dataset("HuggingFaceH4/MATH-500")
-        test_dataset = dataset['test']
+        test_dataset = dataset["test"]
         random.seed(42)
         indices = random.sample(range(len(test_dataset)), 100)
         test_dataset = test_dataset.select(indices)
         dataset = test_dataset
     else:
         dataset = load_dataset("ricdomolm/MATH-500")
-        train_dataset = dataset['train']
+        train_dataset = dataset["train"]
         random.seed(43)
         indices = random.sample(range(len(train_dataset)), 200)
         train_dataset = train_dataset.select(indices)
@@ -25,9 +26,10 @@ def load_math500(repeat: int, test: bool):
 
     return problems, answers
 
+
 def load_s1(repeat: int, test: bool):
     dataset = load_dataset("simplescaling/s1K-1.1")
-    train_dataset = dataset['train']
+    train_dataset = dataset["train"]
     random.seed(43)
     indices = random.sample(range(len(train_dataset)), 200)
     train_dataset = train_dataset.select(indices)
@@ -41,9 +43,10 @@ def load_s1(repeat: int, test: bool):
 
     return problems, answers
 
+
 def load_amc(repeat: int, test: bool):
     dataset = load_dataset("AI-MO/aimo-validation-amc")
-    train_dataset = dataset['train']
+    train_dataset = dataset["train"]
     indices = [i for i in range(50)]
     train_dataset = train_dataset.select(indices)
     dataset = train_dataset
@@ -56,10 +59,11 @@ def load_amc(repeat: int, test: bool):
 
     return problems, answers
 
+
 def load_aime24(repeat: int, test: bool):
     dataset = load_dataset("simplescaling/aime24_nofigures")
-    train_dataset = dataset['train']
-    indices = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14]
+    train_dataset = dataset["train"]
+    indices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
     train_dataset = train_dataset.select(indices)
     dataset = train_dataset
 
@@ -70,11 +74,12 @@ def load_aime24(repeat: int, test: bool):
         answers.extend([a] * repeat)
 
     return problems, answers
+
 
 def load_aime25(repeat: int, test: bool):
     dataset = load_dataset("simplescaling/aime25_nofigures")
-    train_dataset = dataset['train']
-    indices = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14]
+    train_dataset = dataset["train"]
+    indices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
     train_dataset = train_dataset.select(indices)
     dataset = train_dataset
 
@@ -85,6 +90,7 @@ def load_aime25(repeat: int, test: bool):
         answers.extend([a] * repeat)
 
     return problems, answers
+
 
 def load_gsm8k(repeat: int, test: bool):
     train_dataset = load_dataset("openai/gsm8k", "main")["train"]
@@ -107,6 +113,7 @@ def load_gsm8k(repeat: int, test: bool):
 
     return problems, answers
 
+
 def load_gpqa(repeat: int, test: bool):
     train_dataset = load_dataset("Idavidrein/gpqa", "gpqa_diamond")["train"]
     indices = [i for i in range(60)]
@@ -117,21 +124,24 @@ def load_gpqa(repeat: int, test: bool):
     candidates_one = train_dataset["Incorrect Answer 1"]
     candidates_two = train_dataset["Incorrect Answer 2"]
     candidates_three = train_dataset["Incorrect Answer 3"]
-    
+
     inputs = []
     labels = []
-    for q, ca, c1, c2, c3 in zip(questions, correct_answers, candidates_one, candidates_two, candidates_three):
+    for q, ca, c1, c2, c3 in zip(
+        questions, correct_answers, candidates_one, candidates_two, candidates_three
+    ):
         item = (q, ca, c1, c2, c3)
         inputs.extend([item] * repeat)
         labels.extend(["A"] * repeat)
 
     return inputs, labels
 
+
 def load_olympiad(repeat: int, test: bool):
     dataset = load_dataset("Hothan/OlympiadBench", "OE_TO_maths_en_COMP")
-    train_dataset = dataset['train'].filter(
-        lambda example: example['is_multiple_answer'] is False 
-        and example['answer_type'] == 'Numerical'
+    train_dataset = dataset["train"].filter(
+        lambda example: example["is_multiple_answer"] is False
+        and example["answer_type"] == "Numerical"
     )
 
     indices = [i for i in range(50)]
@@ -144,6 +154,7 @@ def load_olympiad(repeat: int, test: bool):
         answers.extend(a * repeat)
 
     return problems, answers
+
 
 def load_my_dataset(name: str, repeat: int = 1, test: bool = True):
     if name == "math500":

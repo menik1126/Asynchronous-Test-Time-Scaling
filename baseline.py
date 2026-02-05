@@ -15,15 +15,20 @@ from async_agent import anyone_check
 client_small = None
 semaphore = None
 
+
 def build_debug_prompt():
     message = [
-        {"role": "system", "content": "You are a creative and expressive assistant. Feel free to write anything you want, in any format or style."},
+        {
+            "role": "system",
+            "content": "You are a creative and expressive assistant. Feel free to write anything you want, in any format or style.",
+        },
         {"role": "user", "content": "Go ahead and write freely. No need to stop."},
     ]
     return message
 
+
 def build_question(question):
-    if type(question) == str:
+    if isinstance(question, str):
         return f"""
     Please answer the following problem using step-by-step reasoning.
     Please separate your reasoning steps with two newline characters (\\n\\n).
@@ -31,7 +36,7 @@ def build_question(question):
 
     Question: {question}
     """
-    elif type(question) == tuple:
+    elif isinstance(question, tuple):
         return f"""
     This is a multiple-choice question.
     Please answer the following problem using step-by-step reasoning.
@@ -46,30 +51,40 @@ def build_question(question):
     D. {question[4]}
     """
 
+
 def build_cot(history):
     return "\n\n".join([f"{h}" for h in history])
+
 
 def build_small_init_prompt(question):
     return [
         {"role": "system", "content": "You are a math expert."},
-        {"role": "user", "content": build_question(question)}
+        {"role": "user", "content": build_question(question)},
     ]
+
 
 def build_small_inner_prompt(question, history):
     return [
         {"role": "user", "content": build_question(question)},
-        {"role": "assistant", "content": build_cot(history)}
+        {"role": "assistant", "content": build_cot(history)},
     ]
 
-async def call_small_model(prompt, turn, max_tokens, idx, small_model_name, small_tokenizer, sglang_port):
+
+async def call_small_model(
+    prompt, turn, max_tokens, idx, small_model_name, small_tokenizer, sglang_port
+):
     messages = (
-        build_small_init_prompt(prompt[0]) if turn == 0 else build_small_inner_prompt(prompt[0], prompt[1])
+        build_small_init_prompt(prompt[0])
+        if turn == 0
+        else build_small_inner_prompt(prompt[0], prompt[1])
     )
 
     global semaphore, client_small
 
     if semaphore is None:
-        raise RuntimeError("Semaphore not initialized. Make sure main() function has been called.")
+        raise RuntimeError(
+            "Semaphore not initialized. Make sure main() function has been called."
+        )
 
     payload = {
         "model": small_model_name,
@@ -86,12 +101,10 @@ async def call_small_model(prompt, turn, max_tokens, idx, small_model_name, smal
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
 
+
 async def extract_answer(history):
     answer = "invalid"
-    temp = "\n\n".join([
-        f"{history[i]}"
-        for i in range(len(history))
-    ])
+    temp = "\n\n".join([f"{history[i]}" for i in range(len(history))])
 
     matches = re.findall(r"\\boxed\{(.*?)\}", temp)
     if matches:
@@ -135,7 +148,17 @@ async def extract_answer(history):
 
     return answer
 
-async def process_single_problem(problem, small_model_max_tokens, turns, idx, small_model_name, small_tokenizer, output_dir, sglang_port):
+
+async def process_single_problem(
+    problem,
+    small_model_max_tokens,
+    turns,
+    idx,
+    small_model_name,
+    small_tokenizer,
+    output_dir,
+    sglang_port,
+):
     prompt = [problem, []]
     answer = "invalid"
     start_time = time.time()
@@ -143,12 +166,20 @@ async def process_single_problem(problem, small_model_max_tokens, turns, idx, sm
     history_log = []
 
     for turn in range(turns):
-        small_out = await call_small_model(prompt, turn, small_model_max_tokens, idx, small_model_name, small_tokenizer, sglang_port)
+        small_out = await call_small_model(
+            prompt,
+            turn,
+            small_model_max_tokens,
+            idx,
+            small_model_name,
+            small_tokenizer,
+            sglang_port,
+        )
         history_log.append({"turn": turn, "model": "small", "output": small_out})
         prompt[1].append(small_out)
 
         if not small_out:
-            print(f"Small model returned empty output for problem", flush=True)
+            print("Small model returned empty output for problem", flush=True)
             print(f"history: {prompt[1]}", flush=True)
             break
 
@@ -170,19 +201,38 @@ async def process_single_problem(problem, small_model_max_tokens, turns, idx, sm
         "final_answer": answer,
         "duration_seconds": duration,
         "full_history": history_log,
-        "question": problem
+        "question": problem,
     }
 
     output_filename = os.path.join(output_dir, f"problem_{idx:04d}.json")
-    with open(output_filename, 'w', encoding='utf-8') as f:
+    with open(output_filename, "w", encoding="utf-8") as f:
         json.dump(result_data, f, indent=4)
 
     return answer, duration
 
-async def fully_async_generate(problems, small_model_max_tokens, turns, small_model_name, small_tokenizer, start_idx, output_dir, sglang_port):
+
+async def fully_async_generate(
+    problems,
+    small_model_max_tokens,
+    turns,
+    small_model_name,
+    small_tokenizer,
+    start_idx,
+    output_dir,
+    sglang_port,
+):
     tasks = [
         asyncio.create_task(
-            process_single_problem(p, small_model_max_tokens, turns, start_idx + idx, small_model_name, small_tokenizer, output_dir, sglang_port)
+            process_single_problem(
+                p,
+                small_model_max_tokens,
+                turns,
+                start_idx + idx,
+                small_model_name,
+                small_tokenizer,
+                output_dir,
+                sglang_port,
+            )
         )
         for idx, p in enumerate(problems)
     ]
@@ -191,6 +241,7 @@ async def fully_async_generate(problems, small_model_max_tokens, turns, small_mo
     avg_time = sum(durations) / len(durations)
     print(f"Average total time per problem: {avg_time:.4f}s")
     return results
+
 
 async def compute_score(results, answers, repeats):
     if not results:
@@ -201,7 +252,9 @@ async def compute_score(results, answers, repeats):
     group = len(generated_ans) // repeats
 
     if group == 0:
-        print(f"Insufficient results for score computation. Need at least {repeats} results, got {len(generated_ans)}.")
+        print(
+            f"Insufficient results for score computation. Need at least {repeats} results, got {len(generated_ans)}."
+        )
         return
 
     right = 0
@@ -224,20 +277,39 @@ async def compute_score(results, answers, repeats):
 
     print(f"Accuracy: {right / group:.2%} ({right}/{group})")
 
+
 async def main():
     global client_small
 
-    parser = argparse.ArgumentParser(description="Process a dataset with a small language model and save results.")
+    parser = argparse.ArgumentParser(
+        description="Process a dataset with a small language model and save results."
+    )
 
-    parser.add_argument("--dataset_name", type=str, default="gpqa", help="Name of the dataset to load.")
-    parser.add_argument("--turns", type=int, default=30, help="Number of turns for each problem.")
-    parser.add_argument("--small_model_max_tokens", type=int, default=100, help="Maximum number of tokens for the small model.")
-    parser.add_argument("--small_model_name", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B", help="Name of the small model to use.")
-    parser.add_argument("--sglang_port", type=int, default=60000, help="Port number for SGLang server.")
+    parser.add_argument(
+        "--dataset_name", type=str, default="gpqa", help="Name of the dataset to load."
+    )
+    parser.add_argument(
+        "--turns", type=int, default=30, help="Number of turns for each problem."
+    )
+    parser.add_argument(
+        "--small_model_max_tokens",
+        type=int,
+        default=100,
+        help="Maximum number of tokens for the small model.",
+    )
+    parser.add_argument(
+        "--small_model_name",
+        type=str,
+        default="deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
+        help="Name of the small model to use.",
+    )
+    parser.add_argument(
+        "--sglang_port", type=int, default=60000, help="Port number for SGLang server."
+    )
 
     args = parser.parse_args()
 
-    small_model_base = args.small_model_name.replace('/', '_')
+    small_model_base = args.small_model_name.replace("/", "_")
     output_dir = os.path.join("./results", f"{small_model_base}_{args.dataset_name}")
 
     os.makedirs(output_dir, exist_ok=True)
@@ -250,10 +322,7 @@ async def main():
     semaphore = asyncio.Semaphore(8)
     client_small = httpx.AsyncClient(
         timeout=240.0,
-        limits=httpx.Limits(
-            max_connections=1000,
-            max_keepalive_connections=1000
-        )
+        limits=httpx.Limits(max_connections=1000, max_keepalive_connections=1000),
     )
 
     repeats = 16
@@ -272,15 +341,26 @@ async def main():
 
                 filepath = os.path.join(output_dir, filename)
                 try:
-                    with open(filepath, 'r', encoding='utf-8') as f:
+                    with open(filepath, "r", encoding="utf-8") as f:
                         data = json.load(f)
-                        if all(key in data for key in ['final_answer', 'duration_seconds', 'problem_index']):
+                        if all(
+                            key in data
+                            for key in [
+                                "final_answer",
+                                "duration_seconds",
+                                "problem_index",
+                            ]
+                        ):
                             processed_data_indices.add(data_idx)
                             valid_processed_count += 1
                         else:
-                            print(f"Warning: File {filename} is missing required fields, will be reprocessed")
+                            print(
+                                f"Warning: File {filename} is missing required fields, will be reprocessed"
+                            )
                 except (json.JSONDecodeError, FileNotFoundError, KeyError) as e:
-                    print(f"Warning: File {filename} is corrupted or incomplete ({e}), will be reprocessed")
+                    print(
+                        f"Warning: File {filename} is corrupted or incomplete ({e}), will be reprocessed"
+                    )
 
             except ValueError:
                 continue
@@ -295,20 +375,26 @@ async def main():
             if group_data_indices.issubset(processed_data_indices):
                 processed_problem_groups.add(problem_group_idx)
 
-    unprocessed_problem_groups = [idx for idx in range(total_problems) if idx not in processed_problem_groups]
+    unprocessed_problem_groups = [
+        idx for idx in range(total_problems) if idx not in processed_problem_groups
+    ]
 
     if not unprocessed_problem_groups:
-        print("All problem groups have been completely processed. Computing final score...")
+        print(
+            "All problem groups have been completely processed. Computing final score..."
+        )
         all_results = []
         missing_files = []
 
         for data_idx in range(len(context)):
             filepath = os.path.join(output_dir, f"problem_{data_idx:04d}.json")
             try:
-                with open(filepath, 'r', encoding='utf-8') as f:
+                with open(filepath, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    if all(key in data for key in ['final_answer', 'duration_seconds']):
-                        all_results.append((data['final_answer'], data['duration_seconds']))
+                    if all(key in data for key in ["final_answer", "duration_seconds"]):
+                        all_results.append(
+                            (data["final_answer"], data["duration_seconds"])
+                        )
                     else:
                         missing_files.append(filepath)
             except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
@@ -316,7 +402,9 @@ async def main():
                 print(f"Warning: Cannot read {filepath}: {e}")
 
         if missing_files:
-            print(f"Warning: {len(missing_files)} files are missing or corrupted. Score computation may be incomplete.")
+            print(
+                f"Warning: {len(missing_files)} files are missing or corrupted. Score computation may be incomplete."
+            )
 
         if len(all_results) > 0:
             await compute_score(all_results, answer, repeats)
@@ -326,12 +414,16 @@ async def main():
         await client_small.aclose()
         return
 
-    print(f"Found {len(processed_problem_groups)} processed problem groups. Resuming from {len(processed_problem_groups)} out of {total_problems} problem groups.")
+    print(
+        f"Found {len(processed_problem_groups)} processed problem groups. Resuming from {len(processed_problem_groups)} out of {total_problems} problem groups."
+    )
     print(f"Total valid processed files: {valid_processed_count}")
 
     results = []
     start = time.time()
-    for problem_group_idx in sync_tqdm(unprocessed_problem_groups, desc="Processing problem groups"):
+    for problem_group_idx in sync_tqdm(
+        unprocessed_problem_groups, desc="Processing problem groups"
+    ):
         group_start = problem_group_idx * repeats
         group_end = (problem_group_idx + 1) * repeats
         problem_group = context[group_start:group_end]
@@ -344,7 +436,7 @@ async def main():
             small_tokenizer,
             group_start,
             output_dir,
-            args.sglang_port
+            args.sglang_port,
         )
         results.extend(result_group)
 
@@ -357,19 +449,25 @@ async def main():
     for data_idx in range(len(context)):
         filepath = os.path.join(output_dir, f"problem_{data_idx:04d}.json")
         try:
-            with open(filepath, 'r', encoding='utf-8') as f:
+            with open(filepath, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                if all(key in data for key in ['final_answer', 'duration_seconds']):
-                    all_results.append((data['final_answer'], data['duration_seconds']))
+                if all(key in data for key in ["final_answer", "duration_seconds"]):
+                    all_results.append((data["final_answer"], data["duration_seconds"]))
                 else:
                     missing_files.append(filepath)
-                    print(f"Warning: File {filepath} is missing required fields.", flush=True)
+                    print(
+                        f"Warning: File {filepath} is missing required fields.",
+                        flush=True,
+                    )
         except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
             missing_files.append(filepath)
             print(f"Warning: Cannot read {filepath}: {e}", flush=True)
 
     if missing_files:
-        print(f"Warning: {len(missing_files)} files are missing or corrupted. Score computation may be incomplete.", flush=True)
+        print(
+            f"Warning: {len(missing_files)} files are missing or corrupted. Score computation may be incomplete.",
+            flush=True,
+        )
 
     if len(all_results) > 0:
         await compute_score(all_results, answer, repeats)
@@ -377,6 +475,7 @@ async def main():
         print("No valid results found for final score computation.")
 
     await client_small.aclose()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

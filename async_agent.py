@@ -51,13 +51,12 @@ async def anyone_check(right_answer, answers):
         api_key=openai_key,
         base_url=openai_base,
     )
-    
+
     temperature = 0.0
     max_tokens = 10
 
     prompt_text = anyone_check_prompt.format(
-        pred_list=repr(answers),
-        gt_label=repr(right_answer)
+        pred_list=repr(answers), gt_label=repr(right_answer)
     )
 
     MAX_RETRIES = 3
@@ -65,8 +64,10 @@ async def anyone_check(right_answer, answers):
 
     for i in range(MAX_RETRIES):
         try:
-            logging.info(f"Attempt {i+1}/{MAX_RETRIES} to call OpenAI API for model: {openai_model}")
-            
+            logging.info(
+                f"Attempt {i+1}/{MAX_RETRIES} to call OpenAI API for model: {openai_model}"
+            )
+
             response = await client.chat.completions.create(
                 model=openai_model,
                 messages=[
@@ -76,22 +77,24 @@ async def anyone_check(right_answer, answers):
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
-            
+
             result = response.choices[0].message.content.strip()
             logging.info(f"API call successful after {i+1} attempt(s).")
             return result
 
         except APITimeoutError as e:
             if i < MAX_RETRIES - 1:
-                delay = initial_delay * (2 ** i)
+                delay = initial_delay * (2**i)
                 logging.warning(f"Request timed out. Retrying in {delay} seconds...")
                 await asyncio.sleep(delay)
             else:
-                logging.error(f"Request timed out after {MAX_RETRIES} attempts. Giving up.")
+                logging.error(
+                    f"Request timed out after {MAX_RETRIES} attempts. Giving up."
+                )
                 raise e
-        
+
         except Exception as e:
             logging.error(f"An unexpected error occurred during API call: {e}")
             raise e
-    
+
     return ""
