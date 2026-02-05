@@ -4,6 +4,8 @@ Official implementation of **ATTS: Asynchronous Test-Time Scaling via Conformal 
 
 > ATTS achieves up to **56.7x speedup** and **4.14x throughput** improvement in test-time scaling while maintaining statistical guarantees through conformal prediction.
 
+[![arXiv](https://img.shields.io/badge/arXiv-2509.15148-b31b1b.svg)](https://arxiv.org/abs/2509.15148)
+
 ## 🔧 Installation
 
 ### ⚠️ Critical: Install Specific SGLang Version
