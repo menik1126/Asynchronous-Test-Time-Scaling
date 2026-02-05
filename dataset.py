@@ -1,8 +1,5 @@
 from datasets import load_dataset
 import random
-import time
-import math
-import numpy as np
 
 def load_math500(repeat: int, test: bool):
     if test:
