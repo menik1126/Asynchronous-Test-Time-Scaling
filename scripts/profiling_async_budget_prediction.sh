@@ -19,11 +19,11 @@ SMALL_PORT=40001  # 小模型端口
 EVAL_PORT=40000   # 大模型端口
 
 # PPL文件路径
-PPL_ARRAY_PATH="/home/xiongjing/qj/sglang-parallel-test-time-scaling/ppls_aime25_64_qwq_32_r1_1_500_per_question.npy"
+PPL_ARRAY_PATH="/home/xiongjing/qj/sglang-parallel-test-time-scaling/ppls_aime25_64_qwq_32_r1_1_500.npy"
 
 # 预测任务超参数
 TURNS=1                   # 最大轮次
-SMALL_MODEL_MAX_TOKENS=700 # 小模型最大token数
+SMALL_MODEL_MAX_TOKENS=1000 # 小模型最大token数
 EVAL_MODEL_MAX_TOKENS=150  # 大模型最大token数
 TAKEOVER_BUDGET=4          # 接管预算
 
@@ -58,7 +58,7 @@ echo "✅ PPL文件存在，开始预测任务..." | tee -a "$LOG_FILE"
 
 # 运行预测任务
 echo "开始预测任务..." | tee -a "$LOG_FILE"
-python3 ref_async_budget_prediction_per_question.py \
+python3 -m ATTS.ref_async_budget_prediction \
     --small_model_name "$SMALL_MODEL" \
     --eval_model_name "$EVAL_MODEL" \
     --dataset_name "$DATASET" \

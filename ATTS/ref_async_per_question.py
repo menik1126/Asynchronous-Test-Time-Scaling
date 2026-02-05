@@ -1,8 +1,8 @@
 import argparse
 import httpx
 import asyncio
-import random
-
+import numpy as np
+import math
 import time
 import re
 import os
@@ -11,19 +11,18 @@ from tqdm.asyncio import tqdm
 from tqdm import tqdm as sync_tqdm
 
 from transformers import AutoTokenizer
-from dataset import load_my_dataset
-from async_agent import anyone_check
+from ATTS.dataset import load_my_dataset
+from ATTS.async_agent import anyone_check
 
 client_small = None
 client_eval = None
-semaphore = asyncio.Semaphore(8)
+small_model_semaphore = None
+eval_model_semaphore = None
 
 small_model_name = ""
 eval_model_name = ""
 tokenizer = None
 small_tokenizer = None
-
-takeover_positions = {}
 
 
 def build_debug_prompt():
@@ -94,25 +93,24 @@ def build_eval_prompt_for_eval(question, history):
     return message
 
 
-async def call_small_model(prompt, turn, max_tokens, idx, port, debug_mode=False):
-    if debug_mode:
-        messages = build_debug_prompt()
-    else:
-        messages = (
-            build_small_init_prompt(prompt[0])
-            if turn == 0
-            else build_small_inner_prompt(prompt[0], prompt[1])
-        )
+async def call_small_model(
+    prompt, turn, max_tokens, idx, port, small_model_temperature
+):
+    messages = (
+        build_small_init_prompt(prompt[0])
+        if turn == 0
+        else build_small_inner_prompt(prompt[0], prompt[1])
+    )
 
-    global semaphore, client_small, small_model_name
+    global small_model_semaphore, client_small, small_model_name
     payload = {
         "model": small_model_name,
         "messages": messages,
-        "temperature": 0.8,
+        "temperature": small_model_temperature,
         "max_tokens": max_tokens,
     }
 
-    async with semaphore:
+    async with small_model_semaphore:
         resp = await client_small.post(
             f"http://127.0.0.1:{port}/v1/chat/completions",
             json=payload,
@@ -121,23 +119,67 @@ async def call_small_model(prompt, turn, max_tokens, idx, port, debug_mode=False
         return resp.json()["choices"][0]["message"]["content"]
 
 
-async def call_eval_model(prompt, max_tokens, idx, port):
+async def call_eval_model(prompt, max_tokens, idx, port, eval_model_temperature):
     messages = build_eval_prompt_for_generate(prompt[0], prompt[1])
-    global semaphore, client_eval, eval_model_name
+    global eval_model_semaphore, client_eval, eval_model_name
     payload = {
         "model": eval_model_name,
         "messages": messages,
-        "temperature": 0.8,
+        "temperature": eval_model_temperature,
         "max_tokens": max_tokens,
     }
 
-    async with semaphore:
+    async with eval_model_semaphore:
         resp = await client_eval.post(
             f"http://127.0.0.1:{port}/v1/chat/completions",
             json=payload,
         )
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
+
+
+async def call_eval_model_ppl(prompt, idx, port):
+    global client_eval, tokenizer
+    message = build_eval_prompt_for_eval(prompt[0], prompt[1])
+    last_history_item = prompt[1][-1].strip("\n")
+
+    position = message.find(last_history_item)
+    if position == -1:
+        print(message)
+        print("---------------------------")
+        print(last_history_item)
+        raise ValueError("Prompt tokens not found in full tokens.")
+
+    sub_message = message[:position]
+    logprob_start_len = len(tokenizer.tokenize(sub_message))
+    payload = {
+        "text": message,
+        "sampling_params": {
+            "temperature": 0,
+            "max_new_tokens": 1,
+        },
+        "return_logprob": True,
+        "logprob_start_len": logprob_start_len,
+        "top_logprobs_num": 1,
+    }
+
+    global eval_model_semaphore
+    async with eval_model_semaphore:
+        resp = await client_eval.post(
+            f"http://127.0.0.1:{port}/generate",
+            json=payload,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        input_token_logprobs = data["meta_info"]["input_token_logprobs"][1:]
+        logprobs = [entry[0] for entry in input_token_logprobs if entry[0] is not None]
+
+        if not logprobs:
+            print(f"No log probabilities returned for problem: {prompt[0]}", flush=True)
+            return 0
+
+        avg_neg_logprob = -sum(logprobs) / len(logprobs)
+        return math.exp(avg_neg_logprob)
 
 
 async def extract_answer(history):
@@ -160,29 +202,29 @@ async def process_single_problem(
     problem,
     small_model_max_tokens,
     evalator_max_tokens,
+    ppl_array,
     turns,
     idx,
     small_model_port,
     eval_model_port,
     output_dir,
-    debug_mode=False,
-    repeats=1,
+    small_model_temperature,
+    eval_model_temperature,
 ):
     prompt = [problem, []]
     answer = "invalid"
     start_time = time.time()
 
-    problem_group_idx = idx // repeats
-
     history_log = []
 
     for turn in range(turns):
-        print(
-            f"Problem Group {problem_group_idx} (Sample {idx}) - Turn {turn+1}/{turns}",
-            flush=True,
-        )
         small_out = await call_small_model(
-            prompt, turn, small_model_max_tokens, idx, small_model_port, debug_mode
+            prompt,
+            turn,
+            small_model_max_tokens,
+            idx,
+            small_model_port,
+            small_model_temperature,
         )
         history_log.append({"turn": turn, "model": "small", "output": small_out})
         prompt[1].append(small_out)
@@ -191,18 +233,21 @@ async def process_single_problem(
             print("Small model returned empty output.", flush=True)
             break
 
-        global takeover_positions
-        should_takeover = False
+        ppl = await call_eval_model_ppl(prompt, idx, eval_model_port)
+        temp_ppl_array = np.array(ppl_array[idx // 16])
+        rank = np.sum(temp_ppl_array < ppl)
+        percent = rank / len(temp_ppl_array)
+        history_log.append(
+            {"turn": turn, "model": "eval_ppl", "ppl": ppl, "percentile": percent}
+        )
 
-        if turn in takeover_positions and idx in takeover_positions[turn]:
-            should_takeover = True
-            print(f"Turn {turn+1}: take over", flush=True)
-        else:
-            print(f"Turn {turn+1}: continue", flush=True)
-
-        if should_takeover:
+        if percent >= 0.6:
             eval_out = await call_eval_model(
-                prompt, evalator_max_tokens, idx, eval_model_port
+                prompt,
+                evalator_max_tokens,
+                idx,
+                eval_model_port,
+                eval_model_temperature,
             )
             history_log.append(
                 {"turn": turn, "model": "eval_generate", "output": eval_out}
@@ -277,7 +322,12 @@ async def main():
         required=True,
         help="Name of the dataset to use (e.g., gpqa, math500).",
     )
-
+    parser.add_argument(
+        "--ppl_array_path",
+        type=str,
+        required=True,
+        help="Path to the PPL results array (.npy file).",
+    )
     parser.add_argument(
         "--turns",
         type=int,
@@ -320,26 +370,41 @@ async def main():
         required=True,
         help="Directory to save the results and history.",
     )
-
     parser.add_argument(
-        "--takeover_budget",
-        type=int,
-        default=10,
-        help="Global budget for evaluation model takeovers (default: 10)",
+        "--small_model_temperature",
+        type=float,
+        default=0.8,
+        help="Temperature for the small model sampling.",
     )
     parser.add_argument(
-        "--debug_mode",
-        action="store_true",
-        help="Enable debug mode with simple prompts",
+        "--eval_model_temperature",
+        type=float,
+        default=0.8,
+        help="Temperature for the evaluation model sampling.",
+    )
+    parser.add_argument(
+        "--small_model_concurrency",
+        type=int,
+        default=8,
+        help="Maximum concurrent requests for the small model.",
+    )
+    parser.add_argument(
+        "--eval_model_concurrency",
+        type=int,
+        default=8,
+        help="Maximum concurrent requests for the evaluation model.",
     )
 
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    global client_small, client_eval, small_model_name, eval_model_name, tokenizer, small_tokenizer
+    global client_small, client_eval, small_model_name, eval_model_name, tokenizer, small_tokenizer, small_model_semaphore, eval_model_semaphore
     small_model_name = args.small_model_name
     eval_model_name = args.eval_model_name
+
+    small_model_semaphore = asyncio.Semaphore(args.small_model_concurrency)
+    eval_model_semaphore = asyncio.Semaphore(args.eval_model_concurrency)
 
     client_small = httpx.AsyncClient(
         timeout=240.0,
@@ -356,22 +421,10 @@ async def main():
     small_tokenizer.use_default_system_prompt = True
 
     context, answer = load_my_dataset(args.dataset_name, args.repeats)
+    ppl_array = np.load(args.ppl_array_path, allow_pickle=True).item()
 
     total_unique_problems = len(answer) // args.repeats
     total_samples = len(context)
-
-    global takeover_positions
-    max_turns = args.turns
-    random.seed(42)
-    for turn_num in range(max_turns):
-        takeover_positions[turn_num] = set(
-            random.sample(
-                range(total_samples), min(args.takeover_budget, total_samples)
-            )
-        )
-        print(
-            f"Turn {turn_num+1} take over range: {sorted(takeover_positions[turn_num])}"
-        )
 
     processed_sample_indices = set()
     for filename in os.listdir(args.output_dir):
@@ -411,8 +464,6 @@ async def main():
     for unique_idx in sync_tqdm(
         unique_problems_to_process, desc="Processing problem groups"
     ):
-        print(f"Processing Problem Group {unique_idx}")
-
         tasks_to_run_for_group = []
         start_sample_idx = unique_idx * args.repeats
         end_sample_idx = start_sample_idx + args.repeats
@@ -425,13 +476,14 @@ async def main():
                         problem,
                         args.small_model_max_tokens,
                         args.evalator_max_tokens,
+                        ppl_array,
                         args.turns,
                         sample_idx,
                         args.small_model_port,
                         args.eval_model_port,
                         args.output_dir,
-                        args.debug_mode,
-                        args.repeats,
+                        args.small_model_temperature,
+                        args.eval_model_temperature,
                     )
                 )
                 tasks_to_run_for_group.append(task)

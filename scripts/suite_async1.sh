@@ -5,25 +5,23 @@
 # 此脚本将循环启动两个 SGLang 服务器，然后执行 ref_conformal.py 脚本进行评估
 # 并在每次循环结束后关闭服务器。
 # ==============================================================================
-export HF_ENDPOINT=https://hf-mirror.com
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# export HF_ENDPOINT=https://hf-mirror.com
 export HF_TOKEN=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
-# export NCCL_P2P_DISABLE=1
-
-# 加载 FlashInfer 修复设置
-
 
 # --- 检查 wait-for-it.sh 脚本是否存在 ---
-if [ ! -f "./wait-for-it.sh" ]; then
+if [ ! -f "$SCRIPT_DIR/wait-for-it.sh" ]; then
     echo "Error: wait-for-it.sh not found. Please download it first."
-    echo "Run: wget https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh && chmod +x wait-for-it.sh"
-    exit 1
+    echo "Run: wget https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh -O $SCRIPT_DIR/wait-for-it.sh && chmod +x $SCRIPT_DIR/wait-for-it.sh"
+    wget https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh -O "$SCRIPT_DIR/wait-for-it.sh" && chmod +x "$SCRIPT_DIR/wait-for-it.sh"
+    #exit 1
 fi
 
 # --- 配置变量 ---
 # 你可以根据需要修改这些参数。
 SGLANG_HOST="0.0.0.0"
-SMALL_MODEL_PORT=51106
-EVAL_MODEL_PORT=51105
+SMALL_MODEL_PORT=52100
+EVAL_MODEL_PORT=52101
 
 # Server CUDA devices
 SMALL_MODEL_DEVICE="2"
@@ -31,25 +29,45 @@ SMALL_MODEL_DEVICE="2"
 EVAL_MODEL_DEVICES="3,4"
 
 # 评估轮次，如果配置数组中未指定，将使用此默认值
-DEFAULT_TURNS=20
+DEFAULT_TURNS=15
+
+# 小模型最大token数量配置
+SMALL_MODEL_MAX_TOKENS=500 #400 #200
+# 大模型最大token数量配置
+EVAL_MODEL_MAX_TOKENS=500 #200 #500
+
+# 小模型采样温度配置
 SMALL_MODEL_TEMPERATURE=0.8
-SMALL_MODEL_MAX_TOKENS=500
-EVAL_MODEL_MAX_TOKENS=500
+
+# 小模型conformal采样温度配置（用于log文件命名）
+SMALL_MODEL_CONFORMAL_TEMPERATURE=0.8
+
+# 大模型采样温度配置
 EVAL_MODEL_TEMPERATURE=0.8
 
+# 并发数量配置
 SMALL_MODEL_CONCURRENCY=16
 EVAL_MODEL_CONCURRENCY=4
-SAMPLE_SIZE=16
-# 并发数
-
 
 # --- 定义所有要运行的配置数组 ---
 # 每个元素包含七个参数: SMALL_MODEL, EVAL_MODEL, DATASET_NAME, PPL_ARRAY_PATH, SMALL_MODEL_MAX_TOKENS, EVAL_MODEL_MAX_TOKENS, TURNS
 CONFIGS=(
-    "simplescaling/s1.1-7B simplescaling/s1.1-32B math500 /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_math500_s1.1_32B_s1.1_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}_per_question.npy $SMALL_MODEL_MAX_TOKENS $EVAL_MODEL_MAX_TOKENS $DEFAULT_TURNS"
-    "simplescaling/s1.1-7B simplescaling/s1.1-32B amc /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_amc_s1.1_32B_s1.1_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}_per_question.npy $SMALL_MODEL_MAX_TOKENS $EVAL_MODEL_MAX_TOKENS $DEFAULT_TURNS"
-    "simplescaling/s1.1-7B simplescaling/s1.1-32B aime25 /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_aime25_s1.1_32B_s1.1_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}_per_question.npy $SMALL_MODEL_MAX_TOKENS $EVAL_MODEL_MAX_TOKENS $DEFAULT_TURNS"
-    "simplescaling/s1.1-7B simplescaling/s1.1-32B aime24 /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_aime24_s1.1_32B_s1.1_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}_per_question.npy $SMALL_MODEL_MAX_TOKENS $EVAL_MODEL_MAX_TOKENS $DEFAULT_TURNS"
+    # "Qwen/Qwen2.5-7B-Instruct simplescaling/s1.1-32B aime25 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_aime25_64_s1_32_qwen_7.npy 100 100 15"
+    # "meta-llama/Llama-3.1-8B-Instruct simplescaling/s1.1-32B aime25 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_aime25_64_s1_32_llama_8.npy 100 100 15"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B simplescaling/s1.1-32B math500 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_math500_64_s1_32_rllama_8.npy 100 100 40"
+    # "Qwen/Qwen2.5-7B-Instruct Qwen/Qwen2.5-32B-Instruct aime24 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_aime24_64_qwen_32_qwen_7.npy 200 200 15"
+    # "Qwen/Qwen2.5-7B-Instruct Qwen/QwQ-32B aime25 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_aime25_64_qwq_32_qwen_7.npy 50 100 15"
+    # "meta-llama/Llama-3.1-8B-Instruct Qwen/QwQ-32B aime25 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_aime25_64_qwq_32_llama_8.npy 50 100 30"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B aime25 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_aime25_64_qwq_32_rllama_8.npy 500 500 15"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B aime24 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_aime24_64_qwq_32_rllama_8.npy 500 500 15"
+    "deepseek-ai/DeepSeek-R1-Distill-Llama-8B simplescaling/s1.1-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_s1.1_32B_rllama_8B_s16_t500_temp0.8.npy $SMALL_MODEL_MAX_TOKENS $EVAL_MODEL_MAX_TOKENS $DEFAULT_TURNS"
+    # "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B simplescaling/s1.1-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_s1.1_32B_r1_1B_s16_t500_temp0.8.npy $SMALL_MODEL_MAX_TOKENS $EVAL_MODEL_MAX_TOKENS $DEFAULT_TURNS"
+    # "Qwen/Qwen2.5-7B-Instruct simplescaling/s1.1-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_s1.1_32B_qwen_7B_s16_t500_temp0.8.npy $SMALL_MODEL_MAX_TOKENS $EVAL_MODEL_MAX_TOKENS $DEFAULT_TURNS"
+    # "meta-llama/Llama-3.1-8B-Instruct simplescaling/s1.1-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_s1.1_32B_llama_8B_s16_t500_temp0.8.npy $SMALL_MODEL_MAX_TOKENS $EVAL_MODEL_MAX_TOKENS $DEFAULT_TURNS"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_qwq_32B_rllama_8B_s16_t500_temp0.8.npy $SMALL_MODEL_MAX_TOKENS $EVAL_MODEL_MAX_TOKENS $DEFAULT_TURNS"
+    # "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B Qwen/QwQ-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_qwq_32B_r1_1B_s16_t500_temp0.8.npy $SMALL_MODEL_MAX_TOKENS $EVAL_MODEL_MAX_TOKENS $DEFAULT_TURNS"
+    # "Qwen/Qwen2.5-7B-Instruct Qwen/QwQ-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_qwq_32B_qwen_7B_s16_t500_temp0.8.npy $SMALL_MODEL_MAX_TOKENS $EVAL_MODEL_MAX_TOKENS $DEFAULT_TURNS"
+    # "meta-llama/Llama-3.1-8B-Instruct Qwen/QwQ-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_qwq_32B_llama_8B_s16_t500_temp0.8.npy $SMALL_MODEL_MAX_TOKENS $EVAL_MODEL_MAX_TOKENS $DEFAULT_TURNS"
 )
 
 # --- 循环遍历所有配置 ---
@@ -60,9 +78,11 @@ for config in "${CONFIGS[@]}"; do
     # 根据配置生成动态日志和输出目录名
     small_model_name_base=$(echo "$SMALL_MODEL" | tr '/' '_')
     eval_model_name_base=$(echo "$EVAL_MODEL" | tr '/' '_')
-    run_identifier="${small_model_name_base}_${eval_model_name_base}_${DATASET_NAME}"
-    hyperparams_suffix="sm${SMALL_MODEL_MAX_TOKENS}_em${EVALATOR_MAX_TOKENS}_t${EVAL_TURNS}_smt${SMALL_MODEL_TEMPERATURE}_emt${EVAL_MODEL_TEMPERATURE}_smc${SMALL_MODEL_CONCURRENCY}_emc${EVAL_MODEL_CONCURRENCY}_per_question"
     
+    # 构建包含超参数的标识符
+    run_identifier="${small_model_name_base}_${eval_model_name_base}_${DATASET_NAME}"
+    #hyperparams_suffix="sm${SMALL_MODEL_MAX_TOKENS}_em${EVALATOR_MAX_TOKENS}_t${EVAL_TURNS}_smt${SMALL_MODEL_TEMPERATURE}_emt${EVAL_MODEL_TEMPERATURE}_smc${SMALL_MODEL_CONCURRENCY}_emc${EVAL_MODEL_CONCURRENCY}"
+    hyperparams_suffix="sm${SMALL_MODEL_MAX_TOKENS}_em${EVALATOR_MAX_TOKENS}_t${EVAL_TURNS}_smt${SMALL_MODEL_TEMPERATURE}_sct${SMALL_MODEL_CONFORMAL_TEMPERATURE}_emt${EVAL_MODEL_TEMPERATURE}_smc${SMALL_MODEL_CONCURRENCY}_emc${EVAL_MODEL_CONCURRENCY}"
     # 定义输出目录路径
     OUTPUT_DIR="./results/${run_identifier}_${hyperparams_suffix}"
     
@@ -82,7 +102,12 @@ for config in "${CONFIGS[@]}"; do
     echo "  - Small Model Max Tokens:  $SMALL_MODEL_MAX_TOKENS"
     echo "  - Evalator Max Tokens:     $EVALATOR_MAX_TOKENS"
     echo "  - Turns:                   $EVAL_TURNS"
+    echo "  - Small Model Temperature: $SMALL_MODEL_TEMPERATURE"
+    echo "  - Eval Model Temperature:  $EVAL_MODEL_TEMPERATURE"
+    echo "  - Small Model Concurrency: $SMALL_MODEL_CONCURRENCY"
+    echo "  - Eval Model Concurrency:  $EVAL_MODEL_CONCURRENCY"
     echo "  - Output Directory:        $OUTPUT_DIR"
+    echo "  - Hyperparams Suffix:      $hyperparams_suffix"
     echo "===================================================================================="
 
     # --- 启动 SGLang 服务器 ---
@@ -108,13 +133,13 @@ for config in "${CONFIGS[@]}"; do
 
     # --- 等待服务器启动并监听端口 ---
     echo "Waiting for SGLang servers to be ready..."
-    ./wait-for-it.sh "$SGLANG_HOST:$SMALL_MODEL_PORT" --timeout=300 -- echo "Small model server is up."
+    "$SCRIPT_DIR/wait-for-it.sh" "$SGLANG_HOST:$SMALL_MODEL_PORT" --timeout=300 -- echo "Small model server is up."
     if [ $? -ne 0 ]; then
         echo "Small model server did not start. Killing PIDs $SMALL_MODEL_PID and $EVAL_MODEL_PID. Exiting."
         kill $SMALL_MODEL_PID $EVAL_MODEL_PID
         exit 1
     fi
-    ./wait-for-it.sh "$SGLANG_HOST:$EVAL_MODEL_PORT" --timeout=600 -- echo "Evaluation model server is up."
+    "$SCRIPT_DIR/wait-for-it.sh" "$SGLANG_HOST:$EVAL_MODEL_PORT" --timeout=300 -- echo "Evaluation model server is up."
     if [ $? -ne 0 ]; then
         echo "Evaluation model server did not start. Killing PIDs $SMALL_MODEL_PID and $EVAL_MODEL_PID. Exiting."
         kill $SMALL_MODEL_PID $EVAL_MODEL_PID
@@ -123,7 +148,7 @@ for config in "${CONFIGS[@]}"; do
 
     # --- 运行 Python 评估脚本，并将输出重定向到日志文件 ---
     echo "Starting evaluation script in the background, output will be logged to $EVAL_SCRIPT_LOG..."
-    python3 evaluation/ref_async_per_question.py \
+    python3 -m ATTS.ref_async \
         --small_model_name "$SMALL_MODEL" \
         --eval_model_name "$EVAL_MODEL" \
         --dataset_name "$DATASET_NAME" \
@@ -134,7 +159,6 @@ for config in "${CONFIGS[@]}"; do
         --small_model_port "$SMALL_MODEL_PORT" \
         --eval_model_port "$EVAL_MODEL_PORT" \
         --output_dir "$OUTPUT_DIR" \
-        --repeats "$SAMPLE_SIZE" \
         --small_model_temperature "$SMALL_MODEL_TEMPERATURE" \
         --eval_model_temperature "$EVAL_MODEL_TEMPERATURE" \
         --small_model_concurrency "$SMALL_MODEL_CONCURRENCY" \

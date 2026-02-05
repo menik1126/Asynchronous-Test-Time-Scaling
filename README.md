@@ -29,17 +29,17 @@ pip install transformers torch numpy tqdm asyncio openai httpx nvtx
 
 ### 1. Launch SGLang Servers
 
-Start the SGLang servers for inference:
+Start the SGLang servers for inference (run from repo root):
 
 ```bash
-bash launch_sglang_servers.sh
+bash scripts/launch_sglang_servers.sh
 ```
 
 **Default Configuration:**
 - Small Model: `deepseek-ai/DeepSeek-R1-Distill-Llama-8B` (Port 40000)
 - Eval Model: `Qwen/QwQ-32B` (Port 40001)
 
-**To customize models or GPUs**, edit the configuration variables in `launch_sglang_servers.sh`:
+**To customize models or GPUs**, edit the configuration variables in `scripts/launch_sglang_servers.sh`:
 ```bash
 SMALL_MODEL="your-model"
 EVAL_MODEL="your-eval-model"
@@ -54,10 +54,10 @@ kill $(cat small_model.pid) $(cat eval_model.pid)
 
 ### 2. Prepare PPL Arrays
 
-Generate perplexity arrays for conformal calibration:
+Generate perplexity arrays for conformal calibration (run from repo root):
 
 ```bash
-bash suite_conformal.sh
+bash scripts/suite_conformal.sh
 ```
 
 This script will:
@@ -69,8 +69,10 @@ This script will:
 
 #### Conformal Prediction Method
 
+Run from repo root so the `ATTS` package is on the path:
+
 ```bash
-python ref_conformal.py \
+python -m ATTS.ref_conformal \
     --small_model_name "deepseek-ai/DeepSeek-R1-Distill-Llama-8B" \
     --eval_model_name "Qwen/QwQ-32B" \
     --dataset_name "aime24" \
@@ -82,7 +84,7 @@ python ref_conformal.py \
 #### Asynchronous Inference
 
 ```bash
-python ref_async.py \
+python -m ATTS.ref_async \
     --small_model_name "deepseek-ai/DeepSeek-R1-Distill-Llama-8B" \
     --eval_model_name "Qwen/QwQ-32B" \
     --dataset_name "aime24"
@@ -105,7 +107,10 @@ The framework supports various draft-target model pairs:
 
 ## 📝 Configuration
 
-Edit variables in shell scripts to customize:
+- **ATTS Python code** lives under **`ATTS/`** (e.g. `ref_conformal.py`, `ref_async.py`, `dataset.py`). Run from repo root: `python -m ATTS.ref_conformal ...`.
+- **Shell scripts** (launch, suite, profiling, etc.) are under **`scripts/`**. Run them from the repo root, e.g. `bash scripts/suite_conformal.sh`.
+
+Edit variables in the shell scripts to customize:
 - `SAMPLE_SIZE`: Number of samples per question (default: 16)
 - `SMALL_MODEL_MAX_TOKENS`: Max tokens for small model (default: 500)
 - `SMALL_MODEL_TEMPERATURE`: Sampling temperature (default: 0.8)
