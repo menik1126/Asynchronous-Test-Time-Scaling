@@ -111,6 +111,68 @@ Edit variables in shell scripts to customize:
 - `SMALL_MODEL_TEMPERATURE`: Sampling temperature (default: 0.8)
 - `CUDA_VISIBLE_DEVICES`: GPU allocation
 
+---
+
+## 📦 Related Components
+
+This repository also includes two related sub-projects under the same roof.
+
+### SpecReason (`specreason/`)
+
+[SpecReason](https://arxiv.org/abs/2504.07891) implements fast inference-time compute via speculative reasoning with vLLM.
+
+**How to use:**
+
+1. **Environment:** Create a conda env and install vLLM 0.8.2 (see `specreason/README.md` for vLLM speculative decoding fix if needed).
+   ```bash
+   conda create -n specreason python=3.12 -y && conda activate specreason
+   pip install vllm datasets
+   ```
+
+2. **Launch two vLLM servers** (e.g. 32B base on port 30000, 1.5B small on port 30001):
+   ```bash
+   VLLM_USE_V1=0 vllm serve Qwen/QwQ-32B --dtype auto -tp 2 --max_model_len 8192 --gpu-memory-utilization 0.8 --enable-prefix-caching --port 30000
+   VLLM_USE_V1=0 vllm serve deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B --dtype auto -tp 2 --max_model_len 8192 --gpu-memory-utilization 0.1 --enable-prefix-caching --port 30001
+   ```
+
+3. **Run SpecReason:**
+   ```bash
+   cd specreason
+   mkdir -p results && OUTPUT_DIR=./results
+   python spec_reason.py --dataset_name aime --problem_id 60 --repeat_id 0 --score_threshold 7.0 --score_method greedy --token_budget 8192 --output_dir "$OUTPUT_DIR"
+   ```
+
+Full details: [specreason/README.md](specreason/README.md).
+
+### Speculative Thinking (`speculative_thinking/`)
+
+Speculative thinking evaluation with sglang/vLLM (SkyThought-style evals).
+
+**How to use:**
+
+1. **Environment:** Use the project’s venv (Python 3.10, sglang, vLLM). From repo root:
+   ```bash
+   cd speculative_thinking
+   source .venv/bin/activate   # or ./activate_env.sh if present
+   ```
+
+2. **Eval normal model:**
+   ```bash
+   python ./skythought_evals/eval.py --model deepseek-ai/DeepSeek-R1-Distill-Qwen-32B \
+       --evals amc23 --n 1 --result-dir ./eval1/amc2323 \
+       --tp 2 --output-file ./eval1/amc2323/32B.txt
+   ```
+
+3. **Eval speculative thinking:** Add a config under `speculative/config/` (see existing `.yml` there), then:
+   ```bash
+   python ./skythought_evals/eval.py --evals amc23 --n 1 --result-dir ./eval1/amc2323 \
+       --tp 3 --output-file ./eval1/amc2323/1b_14b.txt --spe_config ./speculative/config/1b_14b.yml
+   ```
+
+Full details: [speculative_thinking/README.md](speculative_thinking/README.md).
+
+---
+
 ## 📄 Citation
 
 ```bibtex

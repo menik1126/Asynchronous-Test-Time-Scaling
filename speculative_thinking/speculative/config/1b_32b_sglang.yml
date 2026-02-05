@@ -1,0 +1,43 @@
+mode: "sglang" # 'hf' or "vllm" or "sglang"
+target_model_name: "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
+speculative_model_name: "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+target_model_gpu: 1
+speculative_model_gpu: 1
+target_base_gpu_id: 0  # SGLang 特定：目标模型使用的 GPU ID
+speculative_base_gpu_id: 1  # SGLang 特定：推测模型使用的 GPU ID
+max_model_len: 8192
+dtype: "bfloat16"
+
+TRIGGER_TOKENS:
+  - "\n\n"
+TARGET_VALIDATION_KEYWORDS:
+  verify:
+    - "verify"
+    - "think again"
+    - "recap"
+    - "check"
+  negative:
+    - "wait"
+    - "alternatively"
+    - "hold on"
+    - "another"
+  positive:
+    - "yeah"
+    - "yes"
+    - "final answer"
+    - "confident"
+help_think_word: null
+help_recap_words: "Let me check whether there are some wrong steps:"
+
+
+choose_large: true
+max_target_tokens: 20
+begin: false
+begin_token_num: 100
+original_recap_token_num: 125
+recap_after_negative_num: 15
+add_each_recap: 25
+add_each_neg: 5
+max_recap_token_num: 200
+max_negative_num: 30
+time_out: 1200
