@@ -69,7 +69,7 @@ async def compute_accuracy_from_files(output_dir, dataset_name, repeats):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compute accuracy from saved evaluation results.")
     parser.add_argument("--output_dir", type=str, 
-                        default="/zju_0038/xj/sglang-parallel-test-time-scaling/results/meta-llama_Llama-3.1-8B-Instruct_Qwen_QwQ-32B_aime25",
+                        required=True,
                         help="The directory containing the JSON result files.")
     parser.add_argument("--dataset_name", type=str,
                         default="aime25",

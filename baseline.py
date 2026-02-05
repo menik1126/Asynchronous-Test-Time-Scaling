@@ -3,8 +3,6 @@ import json
 import argparse
 import httpx
 import asyncio
-import numpy as np
-import math
 import time
 import re
 from tqdm.asyncio import tqdm
