@@ -27,7 +27,10 @@ small_tokenizer = None
 
 def build_debug_prompt():
     message = [
-        {"role": "system", "content": "You are a creative and expressive assistant. Feel free to write anything you want, in any format or style."},
+        {
+            "role": "system",
+            "content": "You are a creative and expressive assistant. Feel free to write anything you want, in any format or style.",
+        },
         {"role": "user", "content": "Go ahead and write freely. No need to stop."},
     ]
     return message
@@ -66,38 +69,39 @@ def build_cot(history):
 def build_small_init_prompt(question):
     return [
         {"role": "system", "content": "You are a math expert."},
-        {"role": "user", "content": build_question(question)}
+        {"role": "user", "content": build_question(question)},
     ]
 
 
 def build_small_inner_prompt(question, history):
     return [
         {"role": "user", "content": build_question(question)},
-        {"role": "assistant", "content": build_cot(history)}
+        {"role": "assistant", "content": build_cot(history)},
     ]
 
 
 def build_eval_prompt_for_generate(question, history):
     return [
         {"role": "user", "content": build_question(question)},
-        {"role": "assistant", "content": build_cot(history)}
+        {"role": "assistant", "content": build_cot(history)},
     ]
 
 
 def build_eval_prompt_for_eval(question, history):
-    prompts = "\n\n".join([
-        f"{history[i]}"
-        for i in range(len(history))
-    ])
+    prompts = "\n\n".join([f"{history[i]}" for i in range(len(history))])
     message = build_question(question) + "\n" + prompts
     return message
 
 
-async def call_small_model(prompt, turn, max_tokens, idx, port, small_model_temperature):
+async def call_small_model(
+    prompt, turn, max_tokens, idx, port, small_model_temperature
+):
     messages = (
-        build_small_init_prompt(prompt[0]) if turn == 0 else build_small_inner_prompt(prompt[0], prompt[1])
+        build_small_init_prompt(prompt[0])
+        if turn == 0
+        else build_small_inner_prompt(prompt[0], prompt[1])
     )
-    
+
     global small_model_semaphore, client_small, small_model_name
     payload = {
         "model": small_model_name,
@@ -105,7 +109,7 @@ async def call_small_model(prompt, turn, max_tokens, idx, port, small_model_temp
         "temperature": small_model_temperature,
         "max_tokens": max_tokens,
     }
-    
+
     async with small_model_semaphore:
         resp = await client_small.post(
             f"http://127.0.0.1:{port}/v1/chat/completions",
@@ -137,7 +141,7 @@ async def call_eval_model(prompt, max_tokens, idx, port, eval_model_temperature)
 async def call_eval_model_ppl(prompt, idx, port):
     global client_eval, tokenizer
     message = build_eval_prompt_for_eval(prompt[0], prompt[1])
-    last_history_item = prompt[1][-1].strip('\n')
+    last_history_item = prompt[1][-1].strip("\n")
 
     position = message.find(last_history_item)
     if position == -1:
@@ -167,23 +171,20 @@ async def call_eval_model_ppl(prompt, idx, port):
         )
         resp.raise_for_status()
         data = resp.json()
-        input_token_logprobs = data['meta_info']['input_token_logprobs'][1:]
+        input_token_logprobs = data["meta_info"]["input_token_logprobs"][1:]
         logprobs = [entry[0] for entry in input_token_logprobs if entry[0] is not None]
 
         if not logprobs:
             print(f"No log probabilities returned for problem: {prompt[0]}", flush=True)
             return 0
-        
+
         avg_neg_logprob = -sum(logprobs) / len(logprobs)
         return math.exp(avg_neg_logprob)
 
 
 async def extract_answer(history):
     answer = "invalid"
-    temp = "\n\n".join([
-        f"{history[i]}"
-        for i in range(len(history))
-    ])
+    temp = "\n\n".join([f"{history[i]}" for i in range(len(history))])
 
     matches = re.findall(r"\\boxed\{(.*?)\}", temp)
     if matches:
@@ -197,15 +198,34 @@ async def extract_answer(history):
     return answer
 
 
-async def process_single_problem(problem, small_model_max_tokens, evalator_max_tokens, ppl_array, turns, idx, small_model_port, eval_model_port, output_dir, small_model_temperature, eval_model_temperature):
+async def process_single_problem(
+    problem,
+    small_model_max_tokens,
+    evalator_max_tokens,
+    ppl_array,
+    turns,
+    idx,
+    small_model_port,
+    eval_model_port,
+    output_dir,
+    small_model_temperature,
+    eval_model_temperature,
+):
     prompt = [problem, []]
     answer = "invalid"
     start_time = time.time()
-    
+
     history_log = []
 
     for turn in range(turns):
-        small_out = await call_small_model(prompt, turn, small_model_max_tokens, idx, small_model_port, small_model_temperature)
+        small_out = await call_small_model(
+            prompt,
+            turn,
+            small_model_max_tokens,
+            idx,
+            small_model_port,
+            small_model_temperature,
+        )
         history_log.append({"turn": turn, "model": "small", "output": small_out})
         prompt[1].append(small_out)
 
@@ -217,11 +237,21 @@ async def process_single_problem(problem, small_model_max_tokens, evalator_max_t
         temp_ppl_array = np.array(ppl_array[idx // 16])
         rank = np.sum(temp_ppl_array < ppl)
         percent = rank / len(temp_ppl_array)
-        history_log.append({"turn": turn, "model": "eval_ppl", "ppl": ppl, "percentile": percent})
+        history_log.append(
+            {"turn": turn, "model": "eval_ppl", "ppl": ppl, "percentile": percent}
+        )
 
         if percent >= 0.6:
-            eval_out = await call_eval_model(prompt, evalator_max_tokens, idx, eval_model_port, eval_model_temperature)
-            history_log.append({"turn": turn, "model": "eval_generate", "output": eval_out})
+            eval_out = await call_eval_model(
+                prompt,
+                evalator_max_tokens,
+                idx,
+                eval_model_port,
+                eval_model_temperature,
+            )
+            history_log.append(
+                {"turn": turn, "model": "eval_generate", "output": eval_out}
+            )
             prompt[1].append(eval_out)
 
         temp = await extract_answer(prompt[1])
@@ -235,19 +265,19 @@ async def process_single_problem(problem, small_model_max_tokens, evalator_max_t
 
     end_time = time.time()
     duration = end_time - start_time
-    
+
     result_data = {
         "problem_index": idx,
         "final_answer": answer,
         "duration_seconds": duration,
         "full_history": history_log,
-        "question": problem
+        "question": problem,
     }
-    
+
     output_filename = os.path.join(output_dir, f"problem_{idx:04d}.json")
-    with open(output_filename, 'w', encoding='utf-8') as f:
+    with open(output_filename, "w", encoding="utf-8") as f:
         json.dump(result_data, f, indent=4)
-        
+
     return ()
 
 
@@ -271,56 +301,118 @@ async def compute_score(results, answers, repeats):
 
 
 async def main():
-    parser = argparse.ArgumentParser(description="Run a multi-turn, multi-agent evaluation.")
-    parser.add_argument("--small_model_name", type=str, required=True,
-                        help="Name of the small model for generating responses.")
-    parser.add_argument("--eval_model_name", type=str, required=True,
-                        help="Name of the model to use for PPL evaluation.")
-    parser.add_argument("--dataset_name", type=str, required=True,
-                        help="Name of the dataset to use (e.g., gpqa, math500).")
-    parser.add_argument("--ppl_array_path", type=str, required=True,
-                        help="Path to the PPL results array (.npy file).")
-    parser.add_argument("--turns", type=int, default=15,
-                        help="Maximum number of turns for the multi-agent loop.")
-    parser.add_argument("--small_model_max_tokens", type=int, default=500,
-                        help="Maximum tokens for the small model's response.")
-    parser.add_argument("--evalator_max_tokens", type=int, default=500,
-                        help="Maximum tokens for the evaluation model's response.")
-    parser.add_argument("--repeats", type=int, default=16,
-                        help="Number of times to repeat each problem.")
-    parser.add_argument("--small_model_port", type=int, default=51101,
-                        help="Port for the small model server.")
-    parser.add_argument("--eval_model_port", type=int, default=51100,
-                        help="Port for the evaluation model server.")
-    parser.add_argument("--output_dir", type=str, required=True,
-                        help="Directory to save the results and history.")
-    parser.add_argument("--small_model_temperature", type=float, default=0.8,
-                        help="Temperature for the small model sampling.")
-    parser.add_argument("--eval_model_temperature", type=float, default=0.8,
-                        help="Temperature for the evaluation model sampling.")
-    parser.add_argument("--small_model_concurrency", type=int, default=8,
-                        help="Maximum concurrent requests for the small model.")
-    parser.add_argument("--eval_model_concurrency", type=int, default=8,
-                        help="Maximum concurrent requests for the evaluation model.")
-    
+    parser = argparse.ArgumentParser(
+        description="Run a multi-turn, multi-agent evaluation."
+    )
+    parser.add_argument(
+        "--small_model_name",
+        type=str,
+        required=True,
+        help="Name of the small model for generating responses.",
+    )
+    parser.add_argument(
+        "--eval_model_name",
+        type=str,
+        required=True,
+        help="Name of the model to use for PPL evaluation.",
+    )
+    parser.add_argument(
+        "--dataset_name",
+        type=str,
+        required=True,
+        help="Name of the dataset to use (e.g., gpqa, math500).",
+    )
+    parser.add_argument(
+        "--ppl_array_path",
+        type=str,
+        required=True,
+        help="Path to the PPL results array (.npy file).",
+    )
+    parser.add_argument(
+        "--turns",
+        type=int,
+        default=15,
+        help="Maximum number of turns for the multi-agent loop.",
+    )
+    parser.add_argument(
+        "--small_model_max_tokens",
+        type=int,
+        default=500,
+        help="Maximum tokens for the small model's response.",
+    )
+    parser.add_argument(
+        "--evalator_max_tokens",
+        type=int,
+        default=500,
+        help="Maximum tokens for the evaluation model's response.",
+    )
+    parser.add_argument(
+        "--repeats",
+        type=int,
+        default=16,
+        help="Number of times to repeat each problem.",
+    )
+    parser.add_argument(
+        "--small_model_port",
+        type=int,
+        default=51101,
+        help="Port for the small model server.",
+    )
+    parser.add_argument(
+        "--eval_model_port",
+        type=int,
+        default=51100,
+        help="Port for the evaluation model server.",
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        required=True,
+        help="Directory to save the results and history.",
+    )
+    parser.add_argument(
+        "--small_model_temperature",
+        type=float,
+        default=0.8,
+        help="Temperature for the small model sampling.",
+    )
+    parser.add_argument(
+        "--eval_model_temperature",
+        type=float,
+        default=0.8,
+        help="Temperature for the evaluation model sampling.",
+    )
+    parser.add_argument(
+        "--small_model_concurrency",
+        type=int,
+        default=8,
+        help="Maximum concurrent requests for the small model.",
+    )
+    parser.add_argument(
+        "--eval_model_concurrency",
+        type=int,
+        default=8,
+        help="Maximum concurrent requests for the evaluation model.",
+    )
+
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
-    
+
     global client_small, client_eval, small_model_name, eval_model_name, tokenizer, small_tokenizer, small_model_semaphore, eval_model_semaphore
     small_model_name = args.small_model_name
     eval_model_name = args.eval_model_name
-    
+
     small_model_semaphore = asyncio.Semaphore(args.small_model_concurrency)
     eval_model_semaphore = asyncio.Semaphore(args.eval_model_concurrency)
 
     client_small = httpx.AsyncClient(
         timeout=240.0,
-        limits=httpx.Limits(max_connections=1000, max_keepalive_connections=1000)
+        limits=httpx.Limits(max_connections=1000, max_keepalive_connections=1000),
     )
     client_eval = httpx.AsyncClient(
         timeout=240.0,
-        limits=httpx.Limits(max_connections=1000, max_keepalive_connections=1000)
+        limits=httpx.Limits(max_connections=1000, max_keepalive_connections=1000),
     )
 
     tokenizer = AutoTokenizer.from_pretrained(args.eval_model_name)
@@ -330,10 +422,10 @@ async def main():
 
     context, answer = load_my_dataset(args.dataset_name, args.repeats)
     ppl_array = np.load(args.ppl_array_path, allow_pickle=True).item()
-    
+
     total_unique_problems = len(answer) // args.repeats
     total_samples = len(context)
-    
+
     processed_sample_indices = set()
     for filename in os.listdir(args.output_dir):
         if filename.startswith("problem_") and filename.endswith(".json"):
@@ -347,33 +439,35 @@ async def main():
     for unique_idx in range(total_unique_problems):
         start_idx = unique_idx * args.repeats
         end_idx = start_idx + args.repeats
-        
+
         is_group_incomplete = any(
             (idx not in processed_sample_indices) for idx in range(start_idx, end_idx)
         )
         if is_group_incomplete:
             unique_problems_to_process.append(unique_idx)
-    
+
     if not unique_problems_to_process:
         print("all tasks finish")
         all_results = []
         for idx in range(total_samples):
             filepath = os.path.join(args.output_dir, f"problem_{idx:04d}.json")
-            with open(filepath, 'r', encoding='utf-8') as f:
+            with open(filepath, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                all_results.append((data['final_answer'], data['duration_seconds']))
+                all_results.append((data["final_answer"], data["duration_seconds"]))
         await compute_score(all_results, answer, args.repeats)
         return
 
     print(f"find {len(unique_problems_to_process)} groups. handling...")
-    
+
     start_time = time.time()
-    
-    for unique_idx in sync_tqdm(unique_problems_to_process, desc="Processing problem groups"):
+
+    for unique_idx in sync_tqdm(
+        unique_problems_to_process, desc="Processing problem groups"
+    ):
         tasks_to_run_for_group = []
         start_sample_idx = unique_idx * args.repeats
         end_sample_idx = start_sample_idx + args.repeats
-        
+
         for sample_idx in range(start_sample_idx, end_sample_idx):
             if sample_idx not in processed_sample_indices:
                 problem = context[sample_idx]
@@ -389,38 +483,45 @@ async def main():
                         args.eval_model_port,
                         args.output_dir,
                         args.small_model_temperature,
-                        args.eval_model_temperature
+                        args.eval_model_temperature,
                     )
                 )
                 tasks_to_run_for_group.append(task)
-        
+
         if tasks_to_run_for_group:
-            await tqdm.gather(*tasks_to_run_for_group, desc=f"Group {unique_idx} samples")
-            
+            await tqdm.gather(
+                *tasks_to_run_for_group, desc=f"Group {unique_idx} samples"
+            )
+
     end_time = time.time()
     print(f"time: {end_time - start_time:.3f} s")
-    
+
     all_files_exist = True
     for idx in range(total_samples):
         filepath = os.path.join(args.output_dir, f"problem_{idx:04d}.json")
         if not os.path.exists(filepath):
-            print(f"Error: required result file {filepath} is missing. Final score cannot be computed.")
+            print(
+                f"Error: required result file {filepath} is missing. Final score cannot be computed."
+            )
             all_files_exist = False
             break
-            
+
     if all_files_exist:
         all_results = []
         for idx in range(total_samples):
             filepath = os.path.join(args.output_dir, f"problem_{idx:04d}.json")
-            with open(filepath, 'r', encoding='utf-8') as f:
+            with open(filepath, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                all_results.append((data['final_answer'], data['duration_seconds']))
+                all_results.append((data["final_answer"], data["duration_seconds"]))
         await compute_score(all_results, answer, args.repeats)
     else:
-        print("Final score will not be computed due to missing result files. Please rerun the script to complete all tasks.")
+        print(
+            "Final score will not be computed due to missing result files. Please rerun the script to complete all tasks."
+        )
 
     await client_small.aclose()
     await client_eval.aclose()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
