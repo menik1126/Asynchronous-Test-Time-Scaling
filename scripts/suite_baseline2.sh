@@ -1,13 +1,12 @@
 #!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 #export HF_ENDPOINT=https://hf-mirror.com
 export HF_TOKEN=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
 
-#!/bin/bash
-
 # --- 检查 wait-for-it.sh 脚本是否存在 ---
-if [ ! -f "./wait-for-it.sh" ]; then
+if [ ! -f "$SCRIPT_DIR/wait-for-it.sh" ]; then
     echo "Error: wait-for-it.sh not found. Please download it first."
-    echo "Run: wget https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh && chmod +x wait-for-it.sh"
+    echo "Run: wget https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh -O $SCRIPT_DIR/wait-for-it.sh && chmod +x $SCRIPT_DIR/wait-for-it.sh"
     exit 1
 fi
 
@@ -19,7 +18,7 @@ SGLANG_PORT="60001"
 CUDA_DEVICE=3,4 # 显卡设备号
 
 # --- 定义评估脚本的固定参数 ---
-EVAL_SCRIPT="evaluation/baseline.py"
+# Run with: python3 -m ATTS.baseline
 
 # --- 定义所有要运行的配置数组 ---
 # 每个元素包含四个参数: MODEL_NAME, TURNS, MAX_TOKENS, DATASET
@@ -81,7 +80,7 @@ for config in "${CONFIGS[@]}"; do
 
     # --- 等待服务器启动并监听端口 ---
     echo "Waiting for SGLANG server to be ready on $SGLANG_HOST:$SGLANG_PORT..."
-    ./wait-for-it.sh "$SGLANG_HOST:$SGLANG_PORT" --timeout=300 -- echo "SGLang server is up! Proceeding with evaluation..."
+    "$SCRIPT_DIR/wait-for-it.sh" "$SGLANG_HOST:$SGLANG_PORT" --timeout=300 -- echo "SGLang server is up! Proceeding with evaluation..."
 
     # 检查等待是否成功
     if [ $? -ne 0 ]; then
@@ -92,7 +91,7 @@ for config in "${CONFIGS[@]}"; do
 
     # --- 运行评估脚本 ---
     echo "Starting evaluation script..."
-    python "$EVAL_SCRIPT" \
+    python3 -m ATTS.baseline \
         --dataset_name "$EVAL_DATASET" \
         --turns "$EVAL_TURNS" \
         --small_model_max_tokens "$EVAL_MAX_TOKENS" \

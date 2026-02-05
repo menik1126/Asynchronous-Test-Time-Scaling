@@ -45,7 +45,7 @@ nsys profile --stats=true --force-overwrite=true \
     --duration=600 \
     --gpu-metrics-device=all \
     --trace=cuda,nvtx \
-    python3 ref_async_fix_budget.py \
+    python3 -m ATTS.ref_async_fix_budget \
     --small_model_name "$SMALL_MODEL" \
     --eval_model_name "$EVAL_MODEL" \
     --dataset_name "$DATASET" \
@@ -61,7 +61,7 @@ nsys profile --stats=true --force-overwrite=true \
 
 # 同时运行 cProfile 进行 Python 函数级分析
 echo "同时运行 cProfile 进行 Python 函数级分析..." | tee -a "$LOG_FILE"
-python3 -m cProfile -o "$OUTPUT_DIR/profile.prof" ref_async_fix_budget.py \
+python3 -m cProfile -o "$OUTPUT_DIR/profile.prof" -m ATTS.ref_async_fix_budget \
     --small_model_name "$SMALL_MODEL" \
     --eval_model_name "$EVAL_MODEL" \
     --dataset_name "$DATASET" \

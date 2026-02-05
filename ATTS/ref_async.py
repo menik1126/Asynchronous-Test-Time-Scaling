@@ -11,8 +11,8 @@ from tqdm.asyncio import tqdm
 from tqdm import tqdm as sync_tqdm
 
 from transformers import AutoTokenizer
-from dataset import load_my_dataset
-from async_agent import anyone_check
+from ATTS.dataset import load_my_dataset
+from ATTS.async_agent import anyone_check
 
 client_small = None
 client_eval = None

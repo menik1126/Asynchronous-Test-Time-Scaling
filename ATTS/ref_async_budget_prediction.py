@@ -12,7 +12,7 @@ from tqdm.asyncio import tqdm
 from tqdm import tqdm as sync_tqdm
 
 from transformers import AutoTokenizer
-from dataset import load_my_dataset
+from ATTS.dataset import load_my_dataset
 
 client_small = None
 client_eval = None

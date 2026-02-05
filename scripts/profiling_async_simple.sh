@@ -17,7 +17,7 @@ EVAL_GPU="2,3"
 TURNS=3
 TOKENS=150
 REPEATS=4
-TAKEOVER_BUDGET=2  # 每个turn的接管预算 (减少到5，便于测试)
+TAKEOVER_BUDGET=5  # 每个turn的接管预算 (减少到5，便于测试)
 DEBUG_MODE= true   # 设置为true启用debug模式
 
 # 输出目录
@@ -38,7 +38,7 @@ if [ "$DEBUG_MODE" = "true" ]; then
     DEBUG_FLAG="--debug_mode"
 fi
 
-python3 -m cProfile -o "$OUTPUT_DIR/profile.prof" ref_sync_fix_budget.py \
+python3 -m cProfile -o "$OUTPUT_DIR/profile.prof" -m ATTS.ref_async_fix_budget \
     --small_model_name "$SMALL_MODEL" \
     --eval_model_name "$EVAL_MODEL" \
     --dataset_name "$DATASET" \

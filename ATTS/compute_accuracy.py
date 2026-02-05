@@ -2,8 +2,8 @@ import os
 import json
 import argparse
 from tqdm import tqdm
-from dataset import load_my_dataset
-from async_agent import anyone_check
+from ATTS.dataset import load_my_dataset
+from ATTS.async_agent import anyone_check
 import asyncio
 
 

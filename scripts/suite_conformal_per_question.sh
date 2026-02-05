@@ -5,14 +5,15 @@
 # 此脚本将循环启动两个 SGLang 服务器，然后执行 evaluation/baseline.py 脚本
 # 来计算 PPL，并在每次循环结束后关闭服务器。
 # ==============================================================================
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 #export HF_ENDPOINT=https://hf-mirror.com
 export HF_TOKEN=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
 export NCCL_P2P_DISABLE=1
 # --- 检查 wait-for-it.sh 脚本是否存在 ---
-if [ ! -f "./wait-for-it.sh" ]; then
+if [ ! -f "$SCRIPT_DIR/wait-for-it.sh" ]; then
     echo "Error: wait-for-it.sh not found. Please download it first."
-    echo "Run: wget https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh && chmod +x wait-for-it.sh"
-    wget https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh && chmod +x wait-for-it.sh
+    echo "Run: wget https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh -O $SCRIPT_DIR/wait-for-it.sh && chmod +x $SCRIPT_DIR/wait-for-it.sh"
+    wget https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh -O "$SCRIPT_DIR/wait-for-it.sh" && chmod +x "$SCRIPT_DIR/wait-for-it.sh"
     #exit 1
 fi
 
@@ -87,13 +88,13 @@ for config in "${CONFIGS[@]}"; do
 
     # --- 等待服务器启动并监听端口 ---
     echo "Waiting for SGLang servers to be ready..."
-    ./wait-for-it.sh "$SGLANG_HOST:$SMALL_MODEL_PORT" --timeout=300 -- echo "Small model server is up."
+    "$SCRIPT_DIR/wait-for-it.sh" "$SGLANG_HOST:$SMALL_MODEL_PORT" --timeout=300 -- echo "Small model server is up."
     if [ $? -ne 0 ]; then
         echo "Small model server did not start. Killing PIDs $SMALL_MODEL_PID and $EVAL_MODEL_PID. Exiting."
         kill $SMALL_MODEL_PID $EVAL_MODEL_PID
         exit 1
     fi
-    ./wait-for-it.sh "$SGLANG_HOST:$EVAL_MODEL_PORT" --timeout=300 -- echo "Evaluation model server is up."
+    "$SCRIPT_DIR/wait-for-it.sh" "$SGLANG_HOST:$EVAL_MODEL_PORT" --timeout=300 -- echo "Evaluation model server is up."
     if [ $? -ne 0 ]; then
         echo "Evaluation model server did not start. Killing PIDs $SMALL_MODEL_PID and $EVAL_MODEL_PID. Exiting."
         kill $SMALL_MODEL_PID $EVAL_MODEL_PID
@@ -102,7 +103,7 @@ for config in "${CONFIGS[@]}"; do
 
     # --- 运行 Python 评估脚本 ---
     echo "Starting evaluation script..."
-    python3 evaluation/ref_conformal_per_question.py \
+    python3 -m ATTS.ref_conformal_per_question \
         --small_model_name "$SMALL_MODEL" \
         --eval_model_name "$EVAL_MODEL" \
         --dataset_name "$DATASET_NAME" \
