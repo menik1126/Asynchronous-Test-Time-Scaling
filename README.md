@@ -113,6 +113,7 @@ Edit variables in shell scripts to customize:
   title={ATTS: Asynchronous Test-Time Scaling via Conformal Prediction},
   author={Xiong, Jing and Chen, Qiujiang and Ye, Fanghua and Wan, Zhongwei and Zheng, Chuanyang and Zhao, Chenyang and Shen, Hui and Li, Alexander Hanbo and Tao, Chaofan and Tan, Haochen and others},
   journal={arXiv preprint arXiv:2509.15148},
+  url={https://arxiv.org/abs/2509.15148},
   year={2025}
 }
 ```
