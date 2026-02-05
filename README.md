@@ -113,63 +113,58 @@ Edit variables in shell scripts to customize:
 
 ---
 
-## 📦 Related Components
+## 🧪 Testing the Baselines
 
-This repository also includes two related sub-projects under the same roof.
+We provide two baselines in this repo for comparison with ATTS. You can reproduce them as follows.
 
-### SpecReason (`specreason/`)
+### Baseline 1: SpecReason (`specreason/`)
 
-[SpecReason](https://arxiv.org/abs/2504.07891) implements fast inference-time compute via speculative reasoning with vLLM.
+[SpecReason](https://arxiv.org/abs/2504.07891) is a speculative-reasoning baseline (draft + target with vLLM). To **test** it:
 
-**How to use:**
-
-1. **Environment:** Create a conda env and install vLLM 0.8.2 (see `specreason/README.md` for vLLM speculative decoding fix if needed).
+1. **Environment** (from repo root):
    ```bash
    conda create -n specreason python=3.12 -y && conda activate specreason
    pip install vllm datasets
    ```
+   For vLLM speculative decoding you may need to install from source; see [specreason/README.md](specreason/README.md).
 
-2. **Launch two vLLM servers** (e.g. 32B base on port 30000, 1.5B small on port 30001):
+2. **Start two vLLM servers** (e.g. in two terminals; 32B on 30000, 1.5B on 30001):
    ```bash
    VLLM_USE_V1=0 vllm serve Qwen/QwQ-32B --dtype auto -tp 2 --max_model_len 8192 --gpu-memory-utilization 0.8 --enable-prefix-caching --port 30000
    VLLM_USE_V1=0 vllm serve deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B --dtype auto -tp 2 --max_model_len 8192 --gpu-memory-utilization 0.1 --enable-prefix-caching --port 30001
    ```
 
-3. **Run SpecReason:**
+3. **Run the SpecReason baseline** (single problem, optional: change `--problem_id` / `--dataset_name`):
    ```bash
    cd specreason
    mkdir -p results && OUTPUT_DIR=./results
    python spec_reason.py --dataset_name aime --problem_id 60 --repeat_id 0 --score_threshold 7.0 --score_method greedy --token_budget 8192 --output_dir "$OUTPUT_DIR"
    ```
+   Results go to `specreason/results/`. For full datasets and batch scripts see [specreason/README.md](specreason/README.md) and `specreason/spec_reason_della_*.sh`.
 
-Full details: [specreason/README.md](specreason/README.md).
+### Baseline 2: Speculative Thinking (`speculative_thinking/`)
 
-### Speculative Thinking (`speculative_thinking/`)
+Speculative thinking baseline (SkyThought-style evals with sglang/vLLM). To **test** it:
 
-Speculative thinking evaluation with sglang/vLLM (SkyThought-style evals).
-
-**How to use:**
-
-1. **Environment:** Use the project’s venv (Python 3.10, sglang, vLLM). From repo root:
+1. **Environment** (from repo root):
    ```bash
    cd speculative_thinking
-   source .venv/bin/activate   # or ./activate_env.sh if present
+   python -m venv .venv && source .venv/bin/activate
+   pip install sglang vllm   # see speculative_thinking/skythought_evals/requirements.txt for full deps
    ```
 
-2. **Eval normal model:**
+2. **Test normal (non-speculative) model** (no draft model):
    ```bash
    python ./skythought_evals/eval.py --model deepseek-ai/DeepSeek-R1-Distill-Qwen-32B \
-       --evals amc23 --n 1 --result-dir ./eval1/amc2323 \
-       --tp 2 --output-file ./eval1/amc2323/32B.txt
+       --evals amc23 --n 1 --result-dir ./eval_out --tp 2 --output-file ./eval_out/32B.txt
    ```
 
-3. **Eval speculative thinking:** Add a config under `speculative/config/` (see existing `.yml` there), then:
+3. **Test speculative thinking** (draft + target). Pick a config from `speculative/config/` (e.g. `1b_14b.yml`) or add your own, then:
    ```bash
-   python ./skythought_evals/eval.py --evals amc23 --n 1 --result-dir ./eval1/amc2323 \
-       --tp 3 --output-file ./eval1/amc2323/1b_14b.txt --spe_config ./speculative/config/1b_14b.yml
+   python ./skythought_evals/eval.py --evals amc23 --n 1 --result-dir ./eval_out \
+       --tp 3 --output-file ./eval_out/1b_14b.txt --spe_config ./speculative/config/1b_14b.yml
    ```
-
-Full details: [speculative_thinking/README.md](speculative_thinking/README.md).
+   Results are written to the paths given by `--result-dir` and `--output-file`. More options and config format: [speculative_thinking/README.md](speculative_thinking/README.md).
 
 ---
 
