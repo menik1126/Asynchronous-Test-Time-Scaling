@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=5
+export CUDA_VISIBLE_DEVICES=0
 python -m sglang.launch_server \
     --model-path simplescaling/s1.1-7B \
     --inference-model target \
