@@ -13,104 +13,27 @@ Official implementation of **ATTS: Asynchronous Test-Time Scaling via Conformal 
 
 ### ⚠️ Critical: Install SGLang 0.4.3.post4 from Source
 
-**ATTS requires SGLang version 0.4.3.post4.** It cannot be installed via pip because `sgl-kernel==0.0.3.post6` is not available on PyPI. We bundle the source in `third_party/sglang-0.4.3.post4/`. Follow these steps to build and install from source.
+**ATTS requires SGLang version 0.4.3.post4.** It cannot be installed via pip because `sgl-kernel==0.0.3.post6` is not available on PyPI. We strongly recommend using uv ([How to install uv](https://docs.astral.sh/uv/)) to manage the environment. Please configure the project environment according to the following commands.
 
-**1. Prerequisites**
-
-- Python ≥ 3.10
-- CUDA Toolkit (with `nvcc` in `PATH`)
-- Build tools: `python3-dev`, `ninja`, `setuptools`, `wheel`
-- PyTorch with CUDA support (install first)
-
-```bash
-# Ubuntu/Debian: install system dependencies
-sudo apt update
-sudo apt install -y python3-dev ninja-build
-
-# Ensure CUDA is in PATH (adjust path if your CUDA is elsewhere)
-export PATH=/usr/local/cuda/bin:$PATH
-export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
-
-# Create and activate a virtual environment (e.g. uv or venv)
-# Example with uv:
-uv venv .venv && source .venv/bin/activate
-
-# Install PyTorch with CUDA first
-pip install torch torchvision torchaudio
+``` bash
+cd sglang
+uv venv .sglang --python 3.11
+source .sglang/bin/activate
+unzip sgl_kernel.zip
+cp -r 0.0.3.post6-cp39-abi3-manylinux2014_x86_64/sgl_kernel .sglang/lib/python3.11/site-packages/
+cp -r 0.0.3.post6-cp39-abi3-manylinux2014_x86_64/sgl_kernel-0.0.3.post6.dist-info .sglang/lib/python3.11/site-packages/
+rm -rf 0.0.3.post6-cp39-abi3-manylinux2014_x86_64/
+uv pip install -r requirements.txt
 ```
 
-**2. Build sgl-kernel**
+## Quick Check
 
-`sgl-kernel` is a CUDA extension required by SGLang. Build it from the bundled source:
+``` bash
+cd sglang
+source .sglang/bin/activate
 
-```bash
-cd third_party/sglang-0.4.3.post4/sgl-kernel
-
-# Install build dependencies
-pip install setuptools wheel
-
-# Build and install sgl-kernel (this compiles CUDA kernels; may take 5–15 minutes)
-python setup.py bdist_wheel
-pip install dist/*.whl --force-reinstall --no-deps
-
-cd ../..
-```
-
-**3. Install SGLang with [all] extras**
-
-```bash
-cd third_party/sglang-0.4.3.post4/python
-
-pip install -e ".[all]"
-
-cd ../..
-```
-
-**4. Triton compatibility (if needed)**
-
-If you see `ImportError: cannot import name 'default_cache_dir' from 'triton.runtime.cache'`, Triton’s API has changed. Either:
-
-- **Pin Triton** to an older version:
-  ```bash
-  pip install "triton>=3.3,<3.4"
-  ```
-- Or **patch** `sglang/srt/utils.py`: replace the import block with a compatibility layer. See the [troubleshooting note](#triton-import-error) below.
-
-**5. Verify installation**
-
-```bash
-python -c "import sglang; print('sglang version:', sglang.__version__); from sglang import Engine; print('OK')"
-```
-
-Expected output: `sglang version: 0.4.3.post4` and `OK`.
-
----
-
-### Other Dependencies
-
-```bash
-pip install transformers torch numpy tqdm asyncio openai httpx nvtx
-```
-
----
-
-### <a id="triton-import-error"></a>Troubleshooting: Triton import error
-
-If you get `ImportError: cannot import name 'default_cache_dir' from 'triton.runtime.cache'`, add this compatibility block in `site-packages/sglang/srt/utils.py` (after the `FileCacheManager` import):
-
-```python
-from triton.runtime.cache import FileCacheManager
-
-try:
-    from triton.runtime.cache import default_cache_dir, default_dump_dir, default_override_dir
-except ImportError:
-    from triton import knobs
-    def default_cache_dir() -> str:
-        return knobs.cache.dir or os.path.expanduser("~/.triton/cache")
-    def default_dump_dir() -> str:
-        return knobs.cache.dump_dir or os.path.expanduser("~/.triton/dump")
-    def default_override_dir() -> str:
-        return knobs.cache.override_dir or os.path.expanduser("~/.triton/override")
+bash target_server.sh
+python test_group_ppl.py
 ```
 
 ## 🚀 Quick Start
