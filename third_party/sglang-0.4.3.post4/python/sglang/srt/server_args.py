@@ -1015,10 +1015,12 @@ class ServerArgs:
         return cls(**{attr: getattr(args, attr) for attr in attrs})
 
     def url(self):
-        if is_valid_ipv6_address(self.host):
-            return f"http://[{self.host}]:{self.port}"
+        # Use 127.0.0.1 for client connections when server binds to 0.0.0.0
+        host = "127.0.0.1" if self.host == "0.0.0.0" else self.host
+        if is_valid_ipv6_address(host):
+            return f"http://[{host}]:{self.port}"
         else:
-            return f"http://{self.host}:{self.port}"
+            return f"http://{host}:{self.port}"
 
     def check_server_args(self):
         assert (

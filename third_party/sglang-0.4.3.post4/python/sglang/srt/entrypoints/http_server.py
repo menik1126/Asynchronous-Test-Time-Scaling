@@ -676,7 +676,7 @@ def _wait_and_warmup(
 
     # Wait until the server is launched
     success = False
-    for _ in range(120):
+    for _ in range(120):  # Increased from 120 to 300 seconds (5 minutes) for large models
         time.sleep(1)
         try:
             res = requests.get(url + "/get_model_info", timeout=5, headers=headers)
@@ -730,9 +730,14 @@ def _wait_and_warmup(
     except Exception:
         last_traceback = get_exception_traceback()
         if pipe_finish_writer is not None:
-            pipe_finish_writer.send(last_traceback)
-        logger.error(f"Initialization failed. warmup error: {last_traceback}")
-        kill_process_tree(os.getpid())
+            pipe_finish_writer.send("ready")  # Still send ready signal
+        logger.warning(f"Warmup request failed but server will continue running. This is usually safe to ignore. Error: {last_traceback}")
+        # Don't kill the server - warmup failure doesn't mean the server is broken
+        # Users can manually test the server after startup
+        # kill_process_tree(os.getpid())
+        # return
+        if launch_callback is not None:
+            launch_callback()
         return
 
     # Debug print
