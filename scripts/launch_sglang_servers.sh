@@ -2,26 +2,28 @@
 
 # ==============================================================================
 # SGLang Server Launcher
-# This script launches two SGLang servers: a small model and an evaluation model
+# Launches small model and eval model in parallel so both log files are created
+# from the start; then waits for each server to be ready.
 # ==============================================================================
 
+# --- Paths: logs and PIDs in project root (parent of scripts/) ---
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+SMALL_LOG="${PROJECT_DIR}/small_model_server.log"
+EVAL_LOG="${PROJECT_DIR}/eval_model_server.log"
+SMALL_PID_FILE="${PROJECT_DIR}/small_model.pid"
+EVAL_PID_FILE="${PROJECT_DIR}/eval_model.pid"
+
 # --- Configuration ---
-SGLANG_HOST="0.0.0.0"
+SGLANG_HOST="${SGLANG_HOST:-0.0.0.0}"
 SMALL_MODEL_PORT=40000
 EVAL_MODEL_PORT=40001
 
-# Default models (can be overridden by command line arguments)
 SMALL_MODEL="${1:-deepseek-ai/DeepSeek-R1-Distill-Llama-8B}"
 EVAL_MODEL="${2:-Qwen/QwQ-32B}"
-
-# GPU devices
 SMALL_MODEL_DEVICE="${3:-0}"
 EVAL_MODEL_DEVICES="${4:-1,2}"
-
-# Memory fraction
 MEM_FRACTION="${5:-0.9}"
-
-# Tensor parallel size for eval model
 EVAL_TP="${6:-2}"
 
 echo "===================================================================================="
@@ -29,58 +31,132 @@ echo "Launching SGLang Servers"
 echo "  - Small Model:     $SMALL_MODEL (GPU: $SMALL_MODEL_DEVICE, Port: $SMALL_MODEL_PORT)"
 echo "  - Eval Model:      $EVAL_MODEL (GPU: $EVAL_MODEL_DEVICES, Port: $EVAL_MODEL_PORT, TP: $EVAL_TP)"
 echo "  - Memory Fraction: $MEM_FRACTION"
+echo "  - Logs:            $SMALL_LOG , $EVAL_LOG"
 echo "===================================================================================="
 
-# --- Function to check if a server is ready ---
+# --- Cleanup handler for Ctrl+C ---
+cleanup() {
+    echo ""
+    echo "===================================================================================="
+    echo "Caught interrupt signal. Cleaning up..."
+    if [ -n "$SMALL_MODEL_PID" ]; then
+        echo "Killing small model server (PID: $SMALL_MODEL_PID)..."
+        kill $SMALL_MODEL_PID 2>/dev/null || true
+    fi
+    if [ -n "$EVAL_MODEL_PID" ]; then
+        echo "Killing eval model server (PID: $EVAL_MODEL_PID)..."
+        kill $EVAL_MODEL_PID 2>/dev/null || true
+    fi
+    echo "Cleanup complete."
+    echo "===================================================================================="
+    exit 130
+}
+trap cleanup INT TERM
+
+# --- Wait until GET /get_model_info returns HTTP 200 ---
+# Use env -u to clear proxy so curl hits 127.0.0.1 directly; otherwise proxy may return 503 for localhost
+# Initial delay avoids treating leftover processes (from previous run) as "ready"
+WAIT_POLL_INTERVAL=5
+WAIT_INITIAL_DELAY=8
+WAIT_TIMEOUT=600  # 10 minutes timeout
+
 wait_for_server() {
     local port=$1
     local server_name=$2
+    local timeout=${3:-$WAIT_TIMEOUT}
+    
     echo "Waiting for $server_name on port $port to start..."
+    if [ "$timeout" -gt 0 ]; then
+        echo "  (giving process ${WAIT_INITIAL_DELAY}s to bind; then polling every ${WAIT_POLL_INTERVAL}s; timeout: ${timeout}s)"
+    else
+        echo "  (giving process ${WAIT_INITIAL_DELAY}s to bind; then polling every ${WAIT_POLL_INTERVAL}s; no timeout)"
+    fi
+    
+    sleep "$WAIT_INITIAL_DELAY"
+    
+    local start_time=$(date +%s)
+    local attempt=1
+    
     while true; do
-        # Try to connect to the server health endpoint
-        if curl -s http://localhost:$port/health > /dev/null 2>&1 || \
-           curl -s http://localhost:$port/v1/models > /dev/null 2>&1 || \
-           curl -s http://localhost:$port/get_model_info > /dev/null 2>&1; then
-            echo "✓ $server_name on port $port is ready!"
-            break
+        # Check timeout
+        if [ "$timeout" -gt 0 ]; then
+            local current_time=$(date +%s)
+            local elapsed=$((current_time - start_time))
+            if [ "$elapsed" -ge "$timeout" ]; then
+                echo "  ✗ Timeout: $server_name on port $port did not become ready after ${elapsed}s"
+                return 1
+            fi
+        fi
+        
+        # Check server status
+        local code
+        code=$(env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_PROXY \
+            curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "http://127.0.0.1:$port/get_model_info" 2>/dev/null || echo "000")
+        
+        if [ "$code" = "200" ]; then
+            local end_time=$(date +%s)
+            local total_elapsed=$((end_time - start_time))
+            echo "  ✓ $server_name on port $port is ready after ${total_elapsed}s (${attempt} check(s))"
+            return 0
         else
-            echo "  Waiting for $server_name on port $port..."
-            sleep 10  # Wait 10 seconds before retrying
+            echo "  Attempt ${attempt}: get_model_info returned $code, retrying in ${WAIT_POLL_INTERVAL}s..."
+            sleep "$WAIT_POLL_INTERVAL"
+            attempt=$((attempt + 1))
         fi
     done
 }
 
-# --- Launch Small Model Server ---
+# --- Launch both servers in parallel so both log files exist from the start ---
 echo ""
-echo "Starting SGLang server for small model ($SMALL_MODEL)..."
-CUDA_VISIBLE_DEVICES=$SMALL_MODEL_DEVICE python3 -m sglang.launch_server \
+echo "Starting both servers (logs will be written to $SMALL_LOG and $EVAL_LOG)..."
+echo "Note: Proxy environment variables will be unset for server processes to allow local connections."
+
+# Use 'env -u' to unset proxy variables for the server processes
+# This prevents proxy interference with localhost connections during warmup
+# Set HF_HUB_OFFLINE=1 to prevent HuggingFace from trying to connect to huggingface.co
+# when loading models from local cache
+env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_PROXY \
+    HF_HUB_OFFLINE=1 \
+    CUDA_VISIBLE_DEVICES=$SMALL_MODEL_DEVICE python3 -m sglang.launch_server \
     --model-path "$SMALL_MODEL" \
     --tp 1 \
     --mem-fraction-static $MEM_FRACTION \
     --host "$SGLANG_HOST" \
-    --port "$SMALL_MODEL_PORT" > small_model_server.log 2>&1 &
+    --port "$SMALL_MODEL_PORT" > "$SMALL_LOG" 2>&1 &
 SMALL_MODEL_PID=$!
-echo "Small model server started with PID: $SMALL_MODEL_PID"
-echo "Logs: small_model_server.log"
 
-# --- Launch Evaluation Model Server ---
-echo ""
-echo "Starting SGLang server for evaluation model ($EVAL_MODEL)..."
-CUDA_VISIBLE_DEVICES=$EVAL_MODEL_DEVICES python3 -m sglang.launch_server \
+env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_PROXY \
+    HF_HUB_OFFLINE=1 \
+    CUDA_VISIBLE_DEVICES=$EVAL_MODEL_DEVICES python3 -m sglang.launch_server \
     --model-path "$EVAL_MODEL" \
     --tp $EVAL_TP \
     --mem-fraction-static $MEM_FRACTION \
     --host "$SGLANG_HOST" \
-    --port "$EVAL_MODEL_PORT" > eval_model_server.log 2>&1 &
+    --port "$EVAL_MODEL_PORT" > "$EVAL_LOG" 2>&1 &
 EVAL_MODEL_PID=$!
-echo "Evaluation model server started with PID: $EVAL_MODEL_PID"
-echo "Logs: eval_model_server.log"
 
-# --- Wait for servers to be ready ---
+echo "  Small model server PID: $SMALL_MODEL_PID  ->  $SMALL_LOG"
+echo "  Eval model server PID:  $EVAL_MODEL_PID  ->  $EVAL_LOG"
+
+# --- Wait for servers to be ready (order: small first, then eval) ---
 echo ""
 echo "===================================================================================="
-wait_for_server "$SMALL_MODEL_PORT" "Small model server"
-wait_for_server "$EVAL_MODEL_PORT" "Evaluation model server"
+
+if ! wait_for_server "$SMALL_MODEL_PORT" "Small model server"; then
+    echo ""
+    echo "ERROR: Small model server failed to start. Check log: $SMALL_LOG"
+    echo "Killing server processes..."
+    kill $SMALL_MODEL_PID $EVAL_MODEL_PID 2>/dev/null || true
+    exit 1
+fi
+
+if ! wait_for_server "$EVAL_MODEL_PORT" "Evaluation model server"; then
+    echo ""
+    echo "ERROR: Evaluation model server failed to start. Check log: $EVAL_LOG"
+    echo "Killing server processes..."
+    kill $SMALL_MODEL_PID $EVAL_MODEL_PID 2>/dev/null || true
+    exit 1
+fi
 
 echo ""
 echo "===================================================================================="
@@ -90,16 +166,13 @@ echo "Server Information:"
 echo "  - Small Model:  http://$SGLANG_HOST:$SMALL_MODEL_PORT (PID: $SMALL_MODEL_PID)"
 echo "  - Eval Model:   http://$SGLANG_HOST:$EVAL_MODEL_PORT (PID: $EVAL_MODEL_PID)"
 echo ""
-echo "To stop the servers, run:"
-echo "  kill $SMALL_MODEL_PID $EVAL_MODEL_PID"
+echo "Logs:"
+echo "  - $SMALL_LOG"
+echo "  - $EVAL_LOG"
 echo ""
-echo "Or save PIDs to file for later cleanup:"
-echo "  echo $SMALL_MODEL_PID > small_model.pid"
-echo "  echo $EVAL_MODEL_PID > eval_model.pid"
+echo "To stop:  kill $SMALL_MODEL_PID $EVAL_MODEL_PID"
 echo "===================================================================================="
 
-# Save PIDs to files
-echo $SMALL_MODEL_PID > small_model.pid
-echo $EVAL_MODEL_PID > eval_model.pid
-echo ""
-echo "PIDs saved to small_model.pid and eval_model.pid"
+echo "$SMALL_MODEL_PID" > "$SMALL_PID_FILE"
+echo "$EVAL_MODEL_PID"  > "$EVAL_PID_FILE"
+echo "PIDs saved to $SMALL_PID_FILE and $EVAL_PID_FILE"

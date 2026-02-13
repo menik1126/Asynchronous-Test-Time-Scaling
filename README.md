@@ -11,70 +11,52 @@ Official implementation of **ATTS: Asynchronous Test-Time Scaling via Conformal 
 
 ## 🔧 Installation
 
-### ⚠️ Critical: Install SGLang 0.4.3.post4 from Source
+### ⚠️ Critical: Install SGLang 0.4.3.post4 and sgl-kernel
 
-**ATTS requires SGLang version 0.4.3.post4.** It cannot be installed via pip because `sgl-kernel==0.0.3.post6` is not available on PyPI. We bundle the source in `third_party/sglang-0.4.3.post4/`. Follow these steps to build and install from source.
+**ATTS requires SGLang 0.4.3.post4 and sgl-kernel 0.0.3.post6.** Since `sgl-kernel` is not on PyPI, we provide a pre-built wheel in `third_party/sgl_kernel.zip`. Use the following steps (from the **repo root**).
 
 **1. Prerequisites**
 
-- Python ≥ 3.10
-- CUDA Toolkit (with `nvcc` in `PATH`)
-- Build tools: `python3-dev`, `ninja`, `setuptools`, `wheel`
-- PyTorch with CUDA support (install first)
+- Python 3.11
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- CUDA Toolkit (with `nvcc` in `PATH` if you build from source)
+- PyTorch with CUDA support (will be installed via `requirements.txt`)
 
 ```bash
-# Ubuntu/Debian: install system dependencies
-sudo apt update
-sudo apt install -y python3-dev ninja-build
-
-# Ensure CUDA is in PATH (adjust path if your CUDA is elsewhere)
+# Optional: ensure CUDA is in PATH
 export PATH=/usr/local/cuda/bin:$PATH
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
-
-# Create and activate a virtual environment (e.g. uv or venv)
-# Example with uv:
-uv venv .venv && source .venv/bin/activate
-
-# Install PyTorch with CUDA first
-pip install torch torchvision torchaudio
 ```
 
-**2. Build sgl-kernel**
-
-`sgl-kernel` is a CUDA extension required by SGLang. Build it from the bundled source:
+**2. Create virtual environment and activate**
 
 ```bash
-cd third_party/sglang-0.4.3.post4/sgl-kernel
-
-# Install build dependencies
-pip install setuptools wheel
-
-# Build and install sgl-kernel (this compiles CUDA kernels; may take 5–15 minutes)
-python setup.py bdist_wheel
-pip install dist/*.whl --force-reinstall --no-deps
-
-cd ../..
+uv venv .sglang --python 3.11
+source .sglang/bin/activate
 ```
 
-**3. Install SGLang with [all] extras**
+**3. Install sgl-kernel from bundled wheel**
+
+Unzip the pre-built sgl-kernel and copy it into the venv’s site-packages (paths assume you are in repo root for step 2, then `cd third_party` here):
 
 ```bash
-cd third_party/sglang-0.4.3.post4/python
-
-pip install -e ".[all]"
-
-cd ../..
+cd third_party
+unzip sgl_kernel.zip
+cp -r 0.0.3.post6-cp39-abi3-manylinux2014_x86_64/sgl_kernel ../.sglang/lib/python3.11/site-packages/
+cp -r 0.0.3.post6-cp39-abi3-manylinux2014_x86_64/sgl_kernel-0.0.3.post6.dist-info ../.sglang/lib/python3.11/site-packages/
+rm -rf 0.0.3.post6-cp39-abi3-manylinux2014_x86_64/
 ```
 
-**4. Triton compatibility (if needed)**
+**4. Install remaining dependencies (SGLang and extras)**
 
-If you see `ImportError: cannot import name 'default_cache_dir' from 'triton.runtime.cache'`, Triton’s API has changed. Either:
+Still in `third_party/`:
 
-- **Pin Triton** to an older version:
-  ```bash
-  pip install "triton>=3.3,<3.4"
-  ```
-- Or **patch** `sglang/srt/utils.py`: replace the import block with a compatibility layer. See the [troubleshooting note](#triton-import-error) below.
+```bash
+uv pip install -r requirements.txt
+cd ..
+```
+
+This installs SGLang 0.4.3.post4 from the bundled source (`third_party/sglang-0.4.3.post4/python`) and all other dependencies.
 
 **5. Verify installation**
 
@@ -83,35 +65,6 @@ python -c "import sglang; print('sglang version:', sglang.__version__); from sgl
 ```
 
 Expected output: `sglang version: 0.4.3.post4` and `OK`.
-
----
-
-### Other Dependencies
-
-```bash
-pip install transformers torch numpy tqdm asyncio openai httpx nvtx
-```
-
----
-
-### <a id="triton-import-error"></a>Troubleshooting: Triton import error
-
-If you get `ImportError: cannot import name 'default_cache_dir' from 'triton.runtime.cache'`, add this compatibility block in `site-packages/sglang/srt/utils.py` (after the `FileCacheManager` import):
-
-```python
-from triton.runtime.cache import FileCacheManager
-
-try:
-    from triton.runtime.cache import default_cache_dir, default_dump_dir, default_override_dir
-except ImportError:
-    from triton import knobs
-    def default_cache_dir() -> str:
-        return knobs.cache.dir or os.path.expanduser("~/.triton/cache")
-    def default_dump_dir() -> str:
-        return knobs.cache.dump_dir or os.path.expanduser("~/.triton/dump")
-    def default_override_dir() -> str:
-        return knobs.cache.override_dir or os.path.expanduser("~/.triton/override")
-```
 
 ## 🚀 Quick Start
 
