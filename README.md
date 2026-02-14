@@ -103,26 +103,33 @@ EVAL_MODEL_DEVICES="1,2"
 kill $(cat small_model.pid) $(cat eval_model.pid)
 ```
 
-### 2. Prepare PPL Arrays
+### 2. Prepare PPL Arrays & Run Evaluation
 
-Generate perplexity arrays for conformal calibration (run from repo root):
+ATTS supports two conformal prediction coverage modes. Choose the one that fits your use case:
+
+| Coverage Mode | Description | PPL Calibration Script | Async Evaluation Script |
+|---|---|---|---|
+| **Marginal Coverage** | Calibrates a single threshold across the entire dataset. Guarantees that the overall (marginal) coverage rate meets the target level. | `scripts/suite_conformal.sh` | `scripts/suite_async.sh` |
+| **Conditional Coverage** | Calibrates a per-question threshold. Provides stronger, question-level coverage guarantees (conditional on each input). | `scripts/suite_conformal_per_question.sh` | `scripts/suite_async_per_question.sh` |
+
+#### Option A: Marginal Coverage Conformal Prediction
+
+**Step 1 — Generate PPL arrays** (marginal calibration):
 
 ```bash
 bash scripts/suite_conformal.sh
 ```
 
-This script will:
-- Launch SGLang servers for small and evaluation models
-- Compute PPL arrays for the specified datasets
-- Save results to `.npy` files
-
-### 3. Run Evaluation
-
-#### Conformal Prediction Method
-
-Run from repo root so the `ATTS` package is on the path:
+**Step 2 — Run asynchronous evaluation** (marginal coverage):
 
 ```bash
+bash scripts/suite_async.sh
+```
+
+Or run the Python modules directly:
+
+```bash
+# PPL calibration (marginal)
 python -m ATTS.ref_conformal \
     --small_model_name "deepseek-ai/DeepSeek-R1-Distill-Llama-8B" \
     --eval_model_name "Qwen/QwQ-32B" \
@@ -130,16 +137,48 @@ python -m ATTS.ref_conformal \
     --ppl_array_path "ppls_aime24.npy" \
     --small_model_port 40000 \
     --eval_model_port 40001
-```
 
-#### Asynchronous Inference
-
-```bash
+# Async inference (marginal)
 python -m ATTS.ref_async \
     --small_model_name "deepseek-ai/DeepSeek-R1-Distill-Llama-8B" \
     --eval_model_name "Qwen/QwQ-32B" \
     --dataset_name "aime24"
 ```
+
+#### Option B: Conditional Coverage Conformal Prediction (Per-Question)
+
+**Step 1 — Generate PPL arrays** (per-question calibration):
+
+```bash
+bash scripts/suite_conformal_per_question.sh
+```
+
+**Step 2 — Run asynchronous evaluation** (conditional coverage):
+
+```bash
+bash scripts/suite_async_per_question.sh
+```
+
+Or run the Python modules directly:
+
+```bash
+# PPL calibration (per-question)
+python -m ATTS.ref_conformal_per_question \
+    --small_model_name "deepseek-ai/DeepSeek-R1-Distill-Llama-8B" \
+    --eval_model_name "Qwen/QwQ-32B" \
+    --dataset_name "aime24" \
+    --ppl_array_path "ppls_aime24_per_question.npy" \
+    --small_model_port 40000 \
+    --eval_model_port 40001
+
+# Async inference (per-question)
+python -m ATTS.ref_async_per_question \
+    --small_model_name "deepseek-ai/DeepSeek-R1-Distill-Llama-8B" \
+    --eval_model_name "Qwen/QwQ-32B" \
+    --dataset_name "aime24"
+```
+
+> **Note:** All suite scripts automatically handle SGLang server lifecycle (start → calibrate/evaluate → stop) for each model configuration. Edit the `CONFIGS` array and configuration variables inside each script to customize models, datasets, GPUs, and hyperparameters.
 
 ## 📊 Supported Datasets
 
@@ -158,8 +197,12 @@ The framework supports various draft-target model pairs:
 
 ## 📝 Configuration
 
-- **ATTS Python code** lives under **`ATTS/`** (e.g. `ref_conformal.py`, `ref_async.py`, `dataset.py`). Run from repo root: `python -m ATTS.ref_conformal ...`.
-- **Shell scripts** (launch, suite, profiling, etc.) are under **`scripts/`**. Run them from the repo root, e.g. `bash scripts/suite_conformal.sh`.
+- **ATTS Python code** lives under **`ATTS/`**. Run from repo root: `python -m ATTS.<module> ...`.
+  - Marginal coverage: `ref_conformal.py`, `ref_async.py`
+  - Conditional coverage (per-question): `ref_conformal_per_question.py`, `ref_async_per_question.py`
+- **Shell scripts** (launch, suite, profiling, etc.) are under **`scripts/`**. Run them from the repo root:
+  - Marginal coverage: `bash scripts/suite_conformal.sh` / `bash scripts/suite_async.sh`
+  - Conditional coverage: `bash scripts/suite_conformal_per_question.sh` / `bash scripts/suite_async_per_question.sh`
 
 Edit variables in the shell scripts to customize:
 - `SAMPLE_SIZE`: Number of samples per question (default: 16)

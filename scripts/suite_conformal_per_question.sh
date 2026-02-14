@@ -11,43 +11,87 @@ PPL_OUTPUT_DIR="${PROJECT_DIR}/evaluation"
 mkdir -p "$PPL_OUTPUT_DIR"
 #export HF_ENDPOINT=https://hf-mirror.com
 export HF_TOKEN=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
-export NCCL_P2P_DISABLE=1
+
+# --- 检查 wait-for-it.sh 脚本是否存在 ---
+if [ ! -f "$SCRIPT_DIR/wait-for-it.sh" ]; then
+    echo "Error: wait-for-it.sh not found. Please download it first."
+    echo "Run: wget https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh -O $SCRIPT_DIR/wait-for-it.sh && chmod +x $SCRIPT_DIR/wait-for-it.sh"
+    wget https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh -O "$SCRIPT_DIR/wait-for-it.sh" && chmod +x "$SCRIPT_DIR/wait-for-it.sh"
+    #exit 1
+fi
 
 # --- 配置变量 ---
 # 你可以根据需要修改这些参数。
 SGLANG_HOST="0.0.0.0"
-SMALL_MODEL_PORT=50001
-EVAL_MODEL_PORT=50000
+SMALL_MODEL_PORT=40000
+EVAL_MODEL_PORT=40001
 
-# 小模型最大token数量
+# 采样数量配置
+SAMPLE_SIZE=16
+
+# 小模型最大token数量配置
 SMALL_MODEL_MAX_TOKENS=500
 
-# 采样数量
-SAMPLE_SIZE=16
+# 小模型采样温度配置
+SMALL_MODEL_TEMPERATURE=0.8
 
 # 最大并发请求数
 MAX_CONCURRENT=16
 
 # Server CUDA devices
-SMALL_MODEL_DEVICE="0"
+SMALL_MODEL_DEVICE="2"
 # 注意：评估模型使用了两个CUDA设备
-EVAL_MODEL_DEVICES="1"
-# 小模型采样温度配置
-SMALL_MODEL_TEMPERATURE=0.8
+EVAL_MODEL_DEVICES="3,4"
 
 # --- 定义所有要运行的配置数组 ---
-# 每个元素包含四个参数: SMALL_MODEL, EVAL_MODEL, DATASET_NAME, PPL_ARRAY_PATH
+# 每个元素包含五个参数: SMALL_MODEL, EVAL_MODEL, DATASET_NAME, PPL_ARRAY_PATH, CONFIG_SMALL_MODEL_MAX_TOKENS
+# PPL文件名格式: ppls_{dataset}_{eval_model}_{small_model}_s{SAMPLE_SIZE}_t{SMALL_MODEL_MAX_TOKENS}_temp{SMALL_MODEL_TEMPERATURE}_per_question.npy
+# PPL filename helper: auto-generates path from DATASET, EVAL_SHORT, SMALL_SHORT
+# Format: ${PPL_OUTPUT_DIR}/ppls_${DATASET}_${EVAL_SHORT}_${SMALL_SHORT}_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}_per_question.npy
+# Each config: SMALL_MODEL EVAL_MODEL DATASET_NAME EVAL_SHORT SMALL_SHORT [SMALL_MODEL_MAX_TOKENS_OVERRIDE]
+# Each config: SMALL_MODEL EVAL_MODEL DATASET EVAL_SHORT SMALL_SHORT SM_MAX_TOKENS
 CONFIGS=(
- "simplescaling/s1.1-7B simplescaling/s1.1-32B aime24 ${PPL_OUTPUT_DIR}/ppls_aime24_s1.1_32B_s1.1_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}_per_question.npy $SMALL_MODEL_MAX_TOKENS"
- "simplescaling/s1.1-7B simplescaling/s1.1-32B aime25 ${PPL_OUTPUT_DIR}/ppls_aime25_s1.1_32B_s1.1_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}_per_question.npy $SMALL_MODEL_MAX_TOKENS"
- "simplescaling/s1.1-7B simplescaling/s1.1-32B math500 ${PPL_OUTPUT_DIR}/ppls_math500_s1.1_32B_s1.1_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}_per_question.npy $SMALL_MODEL_MAX_TOKENS"
- "simplescaling/s1.1-7B simplescaling/s1.1-32B amc ${PPL_OUTPUT_DIR}/ppls_amc_s1.1_32B_s1.1_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}_per_question.npy $SMALL_MODEL_MAX_TOKENS"
+    # --- Qwen/QwQ-32B as eval ---
+    # "Qwen/Qwen2.5-7B-Instruct Qwen/QwQ-32B aime25 qwq_32B qwen_7B 500"
+    # "meta-llama/Llama-3.1-8B-Instruct Qwen/QwQ-32B aime25 qwq_32B llama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B Qwen/QwQ-32B aime25 qwq_32B r1_1B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B aime24 qwq_32B rllama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B aime25 qwq_32B rllama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B math500 qwq_32B rllama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B gpqa qwq_32B rllama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B olympiad qwq_32B rllama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B Qwen/QwQ-32B olympiad qwq_32B r1_1B 500"
+    # "Qwen/Qwen2.5-7B-Instruct Qwen/QwQ-32B olympiad qwq_32B qwen_7B 500"
+    # "meta-llama/Llama-3.1-8B-Instruct Qwen/QwQ-32B olympiad qwq_32B llama_8B 500"
+    # --- simplescaling/s1.1-32B as eval ---
+    # "Qwen/Qwen2.5-7B-Instruct simplescaling/s1.1-32B aime25 s1_32B qwen_7B 500"
+    # "meta-llama/Llama-3.1-8B-Instruct simplescaling/s1.1-32B aime25 s1_32B llama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B simplescaling/s1.1-32B aime25 s1_32B r1_1B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B simplescaling/s1.1-32B aime24 s1_32B rllama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B simplescaling/s1.1-32B aime25 s1_32B rllama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B simplescaling/s1.1-32B math500 s1_32B rllama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B simplescaling/s1.1-32B gpqa s1_32B rllama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B simplescaling/s1.1-32B olympiad s1_32B rllama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B simplescaling/s1.1-32B olympiad s1_32B r1_1B 500"
+    # "Qwen/Qwen2.5-7B-Instruct simplescaling/s1.1-32B olympiad s1_32B qwen_7B 500"
+    # "meta-llama/Llama-3.1-8B-Instruct simplescaling/s1.1-32B olympiad s1_32B llama_8B 500"
+    # --- Qwen/Qwen2.5-32B-Instruct as eval ---
+    # "Qwen/Qwen2.5-7B-Instruct Qwen/Qwen2.5-32B-Instruct aime24 qwen_32B qwen_7B 500"
+    # "Qwen/Qwen2.5-7B-Instruct Qwen/Qwen2.5-32B-Instruct aime25 qwen_32B qwen_7B 500"
+    # "Qwen/Qwen2.5-7B-Instruct Qwen/Qwen2.5-32B-Instruct math500 qwen_32B qwen_7B 500"
+    # "Qwen/Qwen2.5-7B-Instruct Qwen/Qwen2.5-32B-Instruct gpqa qwen_32B qwen_7B 500"
+    # --- Active config ---
+    "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B math500 qwq_32B rllama_8B 500"
 )
+
 
 # --- 循环遍历所有配置 ---
 for config in "${CONFIGS[@]}"; do
-    # 解析配置字符串
-    read SMALL_MODEL EVAL_MODEL DATASET_NAME PPL_ARRAY_PATH <<< "$config"
+    # 解析配置字符串: SMALL_MODEL EVAL_MODEL DATASET EVAL_SHORT SMALL_SHORT [MAX_TOKENS_OVERRIDE]
+    read SMALL_MODEL EVAL_MODEL DATASET_NAME EVAL_SHORT SMALL_SHORT CONFIG_SMALL_MODEL_MAX_TOKENS <<< "$config"
+
+    # Auto-generate PPL output path from dataset + model short names (with _per_question suffix)
+    PPL_ARRAY_PATH="${PPL_OUTPUT_DIR}/ppls_${DATASET_NAME}_${EVAL_SHORT}_${SMALL_SHORT}_s${SAMPLE_SIZE}_t${CONFIG_SMALL_MODEL_MAX_TOKENS:-$SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}_per_question.npy"
 
     # 根据配置生成动态日志文件名，并添加 "conformal" 前缀
     small_model_name_base=$(echo "$SMALL_MODEL" | tr '/' '_')
@@ -62,6 +106,9 @@ for config in "${CONFIGS[@]}"; do
     echo "  - Eval Model:      $EVAL_MODEL"
     echo "  - Dataset:         $DATASET_NAME"
     echo "  - PPL Array Path:  $PPL_ARRAY_PATH"
+    echo "  - Small Model Max Tokens: ${CONFIG_SMALL_MODEL_MAX_TOKENS:-$SMALL_MODEL_MAX_TOKENS}"
+    echo "  - Small Model Temperature: $SMALL_MODEL_TEMPERATURE"
+    echo "  - Sample Size: $SAMPLE_SIZE"
     echo "===================================================================================="
 
     # --- 启动 SGLang 服务器 ---
@@ -71,7 +118,7 @@ for config in "${CONFIGS[@]}"; do
         CUDA_VISIBLE_DEVICES=$SMALL_MODEL_DEVICE python3 -m sglang.launch_server \
         --model-path "$SMALL_MODEL" \
         --tp 1 \
-        --mem-fraction-static 0.8 \
+        --mem-fraction-static 0.9 \
         --host "$SGLANG_HOST" \
         --port "$SMALL_MODEL_PORT" > "$SMALL_MODEL_LOG" 2>&1 &
     SMALL_MODEL_PID=$!
@@ -82,8 +129,8 @@ for config in "${CONFIGS[@]}"; do
         HF_HUB_OFFLINE=1 \
         CUDA_VISIBLE_DEVICES=$EVAL_MODEL_DEVICES python3 -m sglang.launch_server \
         --model-path "$EVAL_MODEL" \
-        --tp 1 \
-        --mem-fraction-static 0.8 \
+        --tp 2 \
+        --mem-fraction-static 0.9 \
         --host "$SGLANG_HOST" \
         --port "$EVAL_MODEL_PORT" > "$EVAL_MODEL_LOG" 2>&1 &
     EVAL_MODEL_PID=$!
@@ -119,12 +166,12 @@ for config in "${CONFIGS[@]}"; do
         --small_model_name "$SMALL_MODEL" \
         --eval_model_name "$EVAL_MODEL" \
         --dataset_name "$DATASET_NAME" \
-        --small_model_max_tokens "$SMALL_MODEL_MAX_TOKENS" \
-        --sample_size "$SAMPLE_SIZE" \
-        --max_concurrent "$MAX_CONCURRENT" \
         --ppl_array_path "$PPL_ARRAY_PATH" \
         --small_model_port "$SMALL_MODEL_PORT" \
         --eval_model_port "$EVAL_MODEL_PORT" \
+        --sample_size "$SAMPLE_SIZE" \
+        --max_concurrent "$MAX_CONCURRENT" \
+        --small_model_max_tokens "${CONFIG_SMALL_MODEL_MAX_TOKENS:-$SMALL_MODEL_MAX_TOKENS}" \
         --small_model_temperature "$SMALL_MODEL_TEMPERATURE"
     
     # 检查评估脚本是否成功运行
