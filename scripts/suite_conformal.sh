@@ -6,6 +6,9 @@
 # 来计算 PPL，并在每次循环结束后关闭服务器。
 # ==============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+PPL_OUTPUT_DIR="${PROJECT_DIR}/evaluation"
+mkdir -p "$PPL_OUTPUT_DIR"
 #export HF_ENDPOINT=https://hf-mirror.com
 export HF_TOKEN=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
 
@@ -32,6 +35,9 @@ SMALL_MODEL_MAX_TOKENS=500
 # 小模型采样温度配置
 SMALL_MODEL_TEMPERATURE=0.8
 
+# 最大并发请求数
+MAX_CONCURRENT=16
+
 # Server CUDA devices
 SMALL_MODEL_DEVICE="2"
 # 注意：评估模型使用了两个CUDA设备
@@ -40,40 +46,52 @@ EVAL_MODEL_DEVICES="3,4"
 # --- 定义所有要运行的配置数组 ---
 # 每个元素包含五个参数: SMALL_MODEL, EVAL_MODEL, DATASET_NAME, PPL_ARRAY_PATH, CONFIG_SMALL_MODEL_MAX_TOKENS
 # PPL文件名格式: ppls_{dataset}_{eval_model}_{small_model}_s{SAMPLE_SIZE}_t{SMALL_MODEL_MAX_TOKENS}_temp{SMALL_MODEL_TEMPERATURE}.npy
+# PPL filename helper: auto-generates path from DATASET, EVAL_SHORT, SMALL_SHORT
+# Format: ${PPL_OUTPUT_DIR}/ppls_${DATASET}_${EVAL_SHORT}_${SMALL_SHORT}_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy
+# Each config: SMALL_MODEL EVAL_MODEL DATASET_NAME EVAL_SHORT SMALL_SHORT [SMALL_MODEL_MAX_TOKENS_OVERRIDE]
+# Each config: SMALL_MODEL EVAL_MODEL DATASET EVAL_SHORT SMALL_SHORT SM_MAX_TOKENS
 CONFIGS=(
-    # "Qwen/Qwen2.5-7B-Instruct Qwen/QwQ-32B aime25 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_aime25_QwQ_32B_Qwen_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
-    # "Qwen/Qwen2.5-7B-Instruct simplescaling/s1.1-32B aime25 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_aime25_s1_32B_Qwen_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
-    # "meta-llama/Llama-3.1-8B-Instruct Qwen/QwQ-32B aime25 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_aime25_64_qwq_32_llama_8.npy"
-    # "meta-llama/Llama-3.1-8B-Instruct simplescaling/s1.1-32B aime25 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_aime25_64_s1_32_llama_8.npy"
-    # "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B Qwen/QwQ-32B aime25 /root/xj/sglang-parallel-test-time-scaling/ppls_aime25_64_qwq_32_r1_1.npy"
-    # "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B simplescaling/s1.1-32B aime25 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_aime25_64_s1_32_r1_1.npy"
-    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B simplescaling/s1.1-32B aime24 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_aime24_64_s1_32_rllama_8.npy"
-    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B simplescaling/s1.1-32B aime25 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_aime25_64_s1_32_rllama_8.npy"
-    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B simplescaling/s1.1-32B math500 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_math500_64_s1_32_rllama_8.npy"
-    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B simplescaling/s1.1-32B gpqa /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_gpqa_64_s1_32_rllama_8.npy"
-    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B aime24 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_aime24_64_qwq_32_rllama_8.npy"
-    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B aime25 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_aime25_64_qwq_32_rllama_8.npy"
-    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B math500 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_math500_64_qwq_32_rllama_8.npy"
-    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B gpqa /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_gpqa_64_qwq_32_rllama_8.npy"
-    # "Qwen/Qwen2.5-7B-Instruct Qwen/Qwen2.5-32B-Instruct aime24 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_aime24_64_qwen_32_qwen_7.npy"
-    # "Qwen/Qwen2.5-7B-Instruct Qwen/Qwen2.5-32B-Instruct aime25 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_aime25_64_qwen_32_qwen_7.npy"
-    # "Qwen/Qwen2.5-7B-Instruct Qwen/Qwen2.5-32B-Instruct math500 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_math500_64_qwen_32_qwen_7.npy"
-    # "Qwen/Qwen2.5-7B-Instruct Qwen/Qwen2.5-32B-Instruct gpqa /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_gpqa_64_qwen_32_qwen_7.npy"
-    "deepseek-ai/DeepSeek-R1-Distill-Llama-8B simplescaling/s1.1-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_s1.1_32B_rllama_8B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
-    "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B simplescaling/s1.1-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_s1.1_32B_r1_1B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
-    "Qwen/Qwen2.5-7B-Instruct simplescaling/s1.1-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_s1.1_32B_qwen_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
-    "meta-llama/Llama-3.1-8B-Instruct simplescaling/s1.1-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_s1.1_32B_llama_8B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
-    "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_qwq_32B_rllama_8B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
-    "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B Qwen/QwQ-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_qwq_32B_r1_1B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
-    "Qwen/Qwen2.5-7B-Instruct Qwen/QwQ-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_qwq_32B_qwen_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
-    "meta-llama/Llama-3.1-8B-Instruct Qwen/QwQ-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_qwq_32B_llama_8B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
+    # --- Qwen/QwQ-32B as eval ---
+    # "Qwen/Qwen2.5-7B-Instruct Qwen/QwQ-32B aime25 qwq_32B qwen_7B 500"
+    # "meta-llama/Llama-3.1-8B-Instruct Qwen/QwQ-32B aime25 qwq_32B llama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B Qwen/QwQ-32B aime25 qwq_32B r1_1B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B aime24 qwq_32B rllama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B aime25 qwq_32B rllama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B math500 qwq_32B rllama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B gpqa qwq_32B rllama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B olympiad qwq_32B rllama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B Qwen/QwQ-32B olympiad qwq_32B r1_1B 500"
+    # "Qwen/Qwen2.5-7B-Instruct Qwen/QwQ-32B olympiad qwq_32B qwen_7B 500"
+    # "meta-llama/Llama-3.1-8B-Instruct Qwen/QwQ-32B olympiad qwq_32B llama_8B 500"
+    # --- simplescaling/s1.1-32B as eval ---
+    # "Qwen/Qwen2.5-7B-Instruct simplescaling/s1.1-32B aime25 s1_32B qwen_7B 500"
+    # "meta-llama/Llama-3.1-8B-Instruct simplescaling/s1.1-32B aime25 s1_32B llama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B simplescaling/s1.1-32B aime25 s1_32B r1_1B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B simplescaling/s1.1-32B aime24 s1_32B rllama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B simplescaling/s1.1-32B aime25 s1_32B rllama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B simplescaling/s1.1-32B math500 s1_32B rllama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B simplescaling/s1.1-32B gpqa s1_32B rllama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B simplescaling/s1.1-32B olympiad s1_32B rllama_8B 500"
+    # "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B simplescaling/s1.1-32B olympiad s1_32B r1_1B 500"
+    # "Qwen/Qwen2.5-7B-Instruct simplescaling/s1.1-32B olympiad s1_32B qwen_7B 500"
+    # "meta-llama/Llama-3.1-8B-Instruct simplescaling/s1.1-32B olympiad s1_32B llama_8B 500"
+    # --- Qwen/Qwen2.5-32B-Instruct as eval ---
+    # "Qwen/Qwen2.5-7B-Instruct Qwen/Qwen2.5-32B-Instruct aime24 qwen_32B qwen_7B 500"
+    # "Qwen/Qwen2.5-7B-Instruct Qwen/Qwen2.5-32B-Instruct aime25 qwen_32B qwen_7B 500"
+    # "Qwen/Qwen2.5-7B-Instruct Qwen/Qwen2.5-32B-Instruct math500 qwen_32B qwen_7B 500"
+    # "Qwen/Qwen2.5-7B-Instruct Qwen/Qwen2.5-32B-Instruct gpqa qwen_32B qwen_7B 500"
+    # --- Active config ---
+    "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B math500 qwq_32B rllama_8B 500"
 )
 
 
 # --- 循环遍历所有配置 ---
 for config in "${CONFIGS[@]}"; do
-    # 解析配置字符串
-    read SMALL_MODEL EVAL_MODEL DATASET_NAME PPL_ARRAY_PATH CONFIG_SMALL_MODEL_MAX_TOKENS <<< "$config"
+    # 解析配置字符串: SMALL_MODEL EVAL_MODEL DATASET EVAL_SHORT SMALL_SHORT [MAX_TOKENS_OVERRIDE]
+    read SMALL_MODEL EVAL_MODEL DATASET_NAME EVAL_SHORT SMALL_SHORT CONFIG_SMALL_MODEL_MAX_TOKENS <<< "$config"
+
+    # Auto-generate PPL output path from dataset + model short names
+    PPL_ARRAY_PATH="${PPL_OUTPUT_DIR}/ppls_${DATASET_NAME}_${EVAL_SHORT}_${SMALL_SHORT}_s${SAMPLE_SIZE}_t${CONFIG_SMALL_MODEL_MAX_TOKENS:-$SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy"
 
     # 根据配置生成动态日志文件名，并添加 "conformal" 前缀
     small_model_name_base=$(echo "$SMALL_MODEL" | tr '/' '_')
@@ -95,7 +113,9 @@ for config in "${CONFIGS[@]}"; do
 
     # --- 启动 SGLang 服务器 ---
     echo "Starting SGLang server for small model ($SMALL_MODEL)..."
-    CUDA_VISIBLE_DEVICES=$SMALL_MODEL_DEVICE python3 -m sglang.launch_server \
+    env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_PROXY \
+        HF_HUB_OFFLINE=1 \
+        CUDA_VISIBLE_DEVICES=$SMALL_MODEL_DEVICE python3 -m sglang.launch_server \
         --model-path "$SMALL_MODEL" \
         --tp 1 \
         --mem-fraction-static 0.9 \
@@ -105,7 +125,9 @@ for config in "${CONFIGS[@]}"; do
     echo "Small model server started with PID: $SMALL_MODEL_PID"
 
     echo "Starting SGLang server for evaluation model ($EVAL_MODEL)..."
-    CUDA_VISIBLE_DEVICES=$EVAL_MODEL_DEVICES python3 -m sglang.launch_server \
+    env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_PROXY \
+        HF_HUB_OFFLINE=1 \
+        CUDA_VISIBLE_DEVICES=$EVAL_MODEL_DEVICES python3 -m sglang.launch_server \
         --model-path "$EVAL_MODEL" \
         --tp 2 \
         --mem-fraction-static 0.9 \
@@ -114,24 +136,33 @@ for config in "${CONFIGS[@]}"; do
     EVAL_MODEL_PID=$!
     echo "Evaluation model server started with PID: $EVAL_MODEL_PID"
 
-    # --- 等待服务器启动并监听端口 ---
+    # --- Wait for servers to be fully ready (HTTP 200, not just TCP) ---
     echo "Waiting for SGLang servers to be ready..."
-    "$SCRIPT_DIR/wait-for-it.sh" "$SGLANG_HOST:$SMALL_MODEL_PORT" --timeout=300 -- echo "Small model server is up."
-    if [ $? -ne 0 ]; then
-        echo "Small model server did not start. Killing PIDs $SMALL_MODEL_PID and $EVAL_MODEL_PID. Exiting."
-        kill $SMALL_MODEL_PID $EVAL_MODEL_PID
-        exit 1
-    fi
-    "$SCRIPT_DIR/wait-for-it.sh" "$SGLANG_HOST:$EVAL_MODEL_PORT" --timeout=300 -- echo "Evaluation model server is up."
-    if [ $? -ne 0 ]; then
-        echo "Evaluation model server did not start. Killing PIDs $SMALL_MODEL_PID and $EVAL_MODEL_PID. Exiting."
-        kill $SMALL_MODEL_PID $EVAL_MODEL_PID
-        exit 1
-    fi
+    for port in $SMALL_MODEL_PORT $EVAL_MODEL_PORT; do
+        elapsed=0; timeout=600
+        while [ $elapsed -lt $timeout ]; do
+            code=$(env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY \
+                curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 \
+                "http://127.0.0.1:$port/get_model_info" 2>/dev/null || echo "000")
+            if [ "$code" = "200" ]; then
+                echo "  Server on port $port is ready (${elapsed}s)"
+                break
+            fi
+            sleep 5; elapsed=$((elapsed + 5))
+        done
+        if [ "$code" != "200" ]; then
+            echo "ERROR: Server on port $port not ready after ${timeout}s. Aborting."
+            kill $SMALL_MODEL_PID $EVAL_MODEL_PID 2>/dev/null
+            exit 1
+        fi
+    done
+    # Extra wait for warmup request to finish
+    sleep 10
 
     # --- 运行 Python 评估脚本 ---
     echo "Starting evaluation script..."
-    python3 -m ATTS.ref_conformal \
+    env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_PROXY \
+        python3 -m ATTS.ref_conformal \
         --small_model_name "$SMALL_MODEL" \
         --eval_model_name "$EVAL_MODEL" \
         --dataset_name "$DATASET_NAME" \
@@ -139,6 +170,7 @@ for config in "${CONFIGS[@]}"; do
         --small_model_port "$SMALL_MODEL_PORT" \
         --eval_model_port "$EVAL_MODEL_PORT" \
         --sample_size "$SAMPLE_SIZE" \
+        --max_concurrent "$MAX_CONCURRENT" \
         --small_model_max_tokens "${CONFIG_SMALL_MODEL_MAX_TOKENS:-$SMALL_MODEL_MAX_TOKENS}" \
         --small_model_temperature "$SMALL_MODEL_TEMPERATURE"
     

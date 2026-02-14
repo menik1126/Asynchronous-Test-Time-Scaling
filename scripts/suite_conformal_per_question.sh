@@ -6,16 +6,12 @@
 # 来计算 PPL，并在每次循环结束后关闭服务器。
 # ==============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+PPL_OUTPUT_DIR="${PROJECT_DIR}/evaluation"
+mkdir -p "$PPL_OUTPUT_DIR"
 #export HF_ENDPOINT=https://hf-mirror.com
 export HF_TOKEN=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
 export NCCL_P2P_DISABLE=1
-# --- 检查 wait-for-it.sh 脚本是否存在 ---
-if [ ! -f "$SCRIPT_DIR/wait-for-it.sh" ]; then
-    echo "Error: wait-for-it.sh not found. Please download it first."
-    echo "Run: wget https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh -O $SCRIPT_DIR/wait-for-it.sh && chmod +x $SCRIPT_DIR/wait-for-it.sh"
-    wget https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh -O "$SCRIPT_DIR/wait-for-it.sh" && chmod +x "$SCRIPT_DIR/wait-for-it.sh"
-    #exit 1
-fi
 
 # --- 配置变量 ---
 # 你可以根据需要修改这些参数。
@@ -29,6 +25,9 @@ SMALL_MODEL_MAX_TOKENS=500
 # 采样数量
 SAMPLE_SIZE=16
 
+# 最大并发请求数
+MAX_CONCURRENT=16
+
 # Server CUDA devices
 SMALL_MODEL_DEVICE="0"
 # 注意：评估模型使用了两个CUDA设备
@@ -39,10 +38,10 @@ SMALL_MODEL_TEMPERATURE=0.8
 # --- 定义所有要运行的配置数组 ---
 # 每个元素包含四个参数: SMALL_MODEL, EVAL_MODEL, DATASET_NAME, PPL_ARRAY_PATH
 CONFIGS=(
- "simplescaling/s1.1-7B simplescaling/s1.1-32B aime24 /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_aime24_s1.1_32B_s1.1_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}_per_question.npy $SMALL_MODEL_MAX_TOKENS"
- "simplescaling/s1.1-7B simplescaling/s1.1-32B aime25 /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_aime25_s1.1_32B_s1.1_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}_per_question.npy $SMALL_MODEL_MAX_TOKENS"
- "simplescaling/s1.1-7B simplescaling/s1.1-32B math500 /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_math500_s1.1_32B_s1.1_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}_per_question.npy $SMALL_MODEL_MAX_TOKENS"
- "simplescaling/s1.1-7B simplescaling/s1.1-32B amc /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_amc_s1.1_32B_s1.1_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}_per_question.npy $SMALL_MODEL_MAX_TOKENS"
+ "simplescaling/s1.1-7B simplescaling/s1.1-32B aime24 ${PPL_OUTPUT_DIR}/ppls_aime24_s1.1_32B_s1.1_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}_per_question.npy $SMALL_MODEL_MAX_TOKENS"
+ "simplescaling/s1.1-7B simplescaling/s1.1-32B aime25 ${PPL_OUTPUT_DIR}/ppls_aime25_s1.1_32B_s1.1_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}_per_question.npy $SMALL_MODEL_MAX_TOKENS"
+ "simplescaling/s1.1-7B simplescaling/s1.1-32B math500 ${PPL_OUTPUT_DIR}/ppls_math500_s1.1_32B_s1.1_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}_per_question.npy $SMALL_MODEL_MAX_TOKENS"
+ "simplescaling/s1.1-7B simplescaling/s1.1-32B amc ${PPL_OUTPUT_DIR}/ppls_amc_s1.1_32B_s1.1_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}_per_question.npy $SMALL_MODEL_MAX_TOKENS"
 )
 
 # --- 循环遍历所有配置 ---
@@ -67,7 +66,9 @@ for config in "${CONFIGS[@]}"; do
 
     # --- 启动 SGLang 服务器 ---
     echo "Starting SGLang server for small model ($SMALL_MODEL)..."
-    CUDA_VISIBLE_DEVICES=$SMALL_MODEL_DEVICE python3 -m sglang.launch_server \
+    env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_PROXY \
+        HF_HUB_OFFLINE=1 \
+        CUDA_VISIBLE_DEVICES=$SMALL_MODEL_DEVICE python3 -m sglang.launch_server \
         --model-path "$SMALL_MODEL" \
         --tp 1 \
         --mem-fraction-static 0.8 \
@@ -77,7 +78,9 @@ for config in "${CONFIGS[@]}"; do
     echo "Small model server started with PID: $SMALL_MODEL_PID"
 
     echo "Starting SGLang server for evaluation model ($EVAL_MODEL)..."
-    CUDA_VISIBLE_DEVICES=$EVAL_MODEL_DEVICES python3 -m sglang.launch_server \
+    env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_PROXY \
+        HF_HUB_OFFLINE=1 \
+        CUDA_VISIBLE_DEVICES=$EVAL_MODEL_DEVICES python3 -m sglang.launch_server \
         --model-path "$EVAL_MODEL" \
         --tp 1 \
         --mem-fraction-static 0.8 \
@@ -86,29 +89,39 @@ for config in "${CONFIGS[@]}"; do
     EVAL_MODEL_PID=$!
     echo "Evaluation model server started with PID: $EVAL_MODEL_PID"
 
-    # --- 等待服务器启动并监听端口 ---
+    # --- Wait for servers to be fully ready (HTTP 200, not just TCP) ---
     echo "Waiting for SGLang servers to be ready..."
-    "$SCRIPT_DIR/wait-for-it.sh" "$SGLANG_HOST:$SMALL_MODEL_PORT" --timeout=300 -- echo "Small model server is up."
-    if [ $? -ne 0 ]; then
-        echo "Small model server did not start. Killing PIDs $SMALL_MODEL_PID and $EVAL_MODEL_PID. Exiting."
-        kill $SMALL_MODEL_PID $EVAL_MODEL_PID
-        exit 1
-    fi
-    "$SCRIPT_DIR/wait-for-it.sh" "$SGLANG_HOST:$EVAL_MODEL_PORT" --timeout=300 -- echo "Evaluation model server is up."
-    if [ $? -ne 0 ]; then
-        echo "Evaluation model server did not start. Killing PIDs $SMALL_MODEL_PID and $EVAL_MODEL_PID. Exiting."
-        kill $SMALL_MODEL_PID $EVAL_MODEL_PID
-        exit 1
-    fi
+    for port in $SMALL_MODEL_PORT $EVAL_MODEL_PORT; do
+        elapsed=0; timeout=600
+        while [ $elapsed -lt $timeout ]; do
+            code=$(env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY \
+                curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 \
+                "http://127.0.0.1:$port/get_model_info" 2>/dev/null || echo "000")
+            if [ "$code" = "200" ]; then
+                echo "  Server on port $port is ready (${elapsed}s)"
+                break
+            fi
+            sleep 5; elapsed=$((elapsed + 5))
+        done
+        if [ "$code" != "200" ]; then
+            echo "ERROR: Server on port $port not ready after ${timeout}s. Aborting."
+            kill $SMALL_MODEL_PID $EVAL_MODEL_PID 2>/dev/null
+            exit 1
+        fi
+    done
+    # Extra wait for warmup request to finish
+    sleep 10
 
     # --- 运行 Python 评估脚本 ---
     echo "Starting evaluation script..."
-    python3 -m ATTS.ref_conformal_per_question \
+    env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_PROXY \
+        python3 -m ATTS.ref_conformal_per_question \
         --small_model_name "$SMALL_MODEL" \
         --eval_model_name "$EVAL_MODEL" \
         --dataset_name "$DATASET_NAME" \
         --small_model_max_tokens "$SMALL_MODEL_MAX_TOKENS" \
         --sample_size "$SAMPLE_SIZE" \
+        --max_concurrent "$MAX_CONCURRENT" \
         --ppl_array_path "$PPL_ARRAY_PATH" \
         --small_model_port "$SMALL_MODEL_PORT" \
         --eval_model_port "$EVAL_MODEL_PORT" \
