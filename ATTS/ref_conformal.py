@@ -90,7 +90,8 @@ async def call_eval_model_ppl(prompt, eval_model_port):
     sub_message = message[:position]
     logprob_start_len = len(tokenizer.tokenize(sub_message))
 
-    response = requests.post(
+    response = await asyncio.to_thread(
+        requests.post,
         f"http://localhost:{eval_model_port}/generate",
         json={
             "text": message,
@@ -126,21 +127,32 @@ async def process_single_problem(
 
 
 async def compute_ppl(
-    problems, small_model_max_tokens, ppl_array_path, temperature, eval_model_port
+    problems,
+    small_model_max_tokens,
+    ppl_array_path,
+    temperature,
+    eval_model_port,
+    max_concurrent=16,
 ):
-    all_tasks = [
-        asyncio.create_task(
-            process_single_problem(
+    semaphore = asyncio.Semaphore(max_concurrent)
+
+    async def process_with_semaphore(problem):
+        async with semaphore:
+            return await process_single_problem(
                 problem,
                 small_model_max_tokens,
                 temperature,
                 eval_model_port,
             )
-        )
+
+    all_tasks = [
+        asyncio.create_task(process_with_semaphore(problem))
         for problem in problems
     ]
 
-    ppls = await tqdm.gather(*all_tasks, desc="Processing problems")
+    ppls = await tqdm.gather(
+        *all_tasks, desc=f"Processing problems (max {max_concurrent} concurrent)"
+    )
     print(ppls)
     np.save(ppl_array_path, np.array(ppls))
     return None
@@ -196,6 +208,12 @@ async def main():
         "--sample_size", type=int, default=16, help="Number of samples to process."
     )
     parser.add_argument(
+        "--max_concurrent",
+        type=int,
+        default=16,
+        help="Maximum number of concurrent requests.",
+    )
+    parser.add_argument(
         "--small_model_temperature",
         type=float,
         default=0.7,
@@ -226,12 +244,47 @@ async def main():
     print(f"Starting evaluation on dataset: {args.dataset_name}")
     print(f"Saving results to: {args.ppl_array_path}")
 
+    # Sanity check: verify both servers are reachable before launching tasks
+    import os
+    print("  Proxy env vars:", {k: os.environ[k] for k in os.environ if 'proxy' in k.lower()})
+    for name, port in [("Small model", args.small_model_port), ("Eval model", args.eval_model_port)]:
+        for attempt in range(10):
+            try:
+                r = requests.get(
+                    f"http://127.0.0.1:{port}/get_model_info",
+                    timeout=5,
+                    proxies={"http": None, "https": None},  # Force no proxy
+                )
+                if r.status_code == 200:
+                    print(f"  {name} on port {port}: OK")
+                    break
+            except Exception as e:
+                print(f"  {name} on port {port}: {type(e).__name__}: {e}")
+            print(f"  {name} on port {port}: retrying ({attempt+1}/10)...")
+            time.sleep(3)
+        else:
+            raise RuntimeError(f"{name} on port {port} not reachable after 10 retries")
+
+    # Quick test: single chat completion to ensure /v1/chat/completions works
+    print("Testing /v1/chat/completions endpoint...")
+    try:
+        test_resp = small_model.chat.completions.create(
+            model=small_model_name,
+            messages=[{"role": "user", "content": "1+1="}],
+            max_tokens=5,
+        )
+        print(f"  Test response: {test_resp.choices[0].message.content!r} - OK")
+    except Exception as e:
+        print(f"  Test FAILED: {type(e).__name__}: {e}")
+        raise
+
     await compute_ppl(
         problems=context,
         small_model_max_tokens=args.small_model_max_tokens,
         ppl_array_path=args.ppl_array_path,
         temperature=args.small_model_temperature,
         eval_model_port=args.eval_model_port,
+        max_concurrent=args.max_concurrent,
     )
 
     end_time = time.time()
