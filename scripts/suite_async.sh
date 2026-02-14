@@ -76,7 +76,7 @@ CONFIGS=(
     # "meta-llama/Llama-3.1-8B-Instruct Qwen/QwQ-32B aime25 qwq_32B llama_8B 50 100 30"
     # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B aime25 qwq_32B rllama_8B 500 500 15"
     # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B aime24 qwq_32B rllama_8B 500 500 15"
-    "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B olympiad qwq_32B rllama_8B $SMALL_MODEL_MAX_TOKENS $EVAL_MODEL_MAX_TOKENS $DEFAULT_TURNS"
+    "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B math500 qwq_32B rllama_8B $SMALL_MODEL_MAX_TOKENS $EVAL_MODEL_MAX_TOKENS $DEFAULT_TURNS"
     # "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B Qwen/QwQ-32B olympiad qwq_32B r1_1B $SMALL_MODEL_MAX_TOKENS $EVAL_MODEL_MAX_TOKENS $DEFAULT_TURNS"
     # "Qwen/Qwen2.5-7B-Instruct Qwen/QwQ-32B olympiad qwq_32B qwen_7B $SMALL_MODEL_MAX_TOKENS $EVAL_MODEL_MAX_TOKENS $DEFAULT_TURNS"
     # "meta-llama/Llama-3.1-8B-Instruct Qwen/QwQ-32B olympiad qwq_32B llama_8B $SMALL_MODEL_MAX_TOKENS $EVAL_MODEL_MAX_TOKENS $DEFAULT_TURNS"
