@@ -26,12 +26,21 @@ EVAL_MODEL_DEVICES="${4:-1,2}"
 MEM_FRACTION="${5:-0.9}"
 EVAL_TP="${6:-2}"
 
+# Flashinfer sm90 optimization (set to 1 to disable sm90 kernels if compilation fails)
+# This uses generic kernels instead - slightly slower but more stable
+FLASHINFER_DISABLE_SM90="${FLASHINFER_DISABLE_SM90:-0}"
+
 echo "===================================================================================="
 echo "Launching SGLang Servers"
 echo "  - Small Model:     $SMALL_MODEL (GPU: $SMALL_MODEL_DEVICE, Port: $SMALL_MODEL_PORT)"
 echo "  - Eval Model:      $EVAL_MODEL (GPU: $EVAL_MODEL_DEVICES, Port: $EVAL_MODEL_PORT, TP: $EVAL_TP)"
 echo "  - Memory Fraction: $MEM_FRACTION"
 echo "  - Logs:            $SMALL_LOG , $EVAL_LOG"
+if [ "$FLASHINFER_DISABLE_SM90" = "1" ]; then
+    echo "  - flashinfer:      sm90 optimizations DISABLED (using generic kernels)"
+else
+    echo "  - flashinfer:      sm90 optimizations ENABLED"
+fi
 echo "===================================================================================="
 
 # --- Cleanup handler for Ctrl+C ---
@@ -122,7 +131,8 @@ env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_
     --tp 1 \
     --mem-fraction-static $MEM_FRACTION \
     --host "$SGLANG_HOST" \
-    --port "$SMALL_MODEL_PORT" > "$SMALL_LOG" 2>&1 &
+    --port "$SMALL_MODEL_PORT" \
+    --watchdog-timeout 600 > "$SMALL_LOG" 2>&1 &
 SMALL_MODEL_PID=$!
 
 env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_PROXY \
@@ -132,7 +142,8 @@ env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_
     --tp $EVAL_TP \
     --mem-fraction-static $MEM_FRACTION \
     --host "$SGLANG_HOST" \
-    --port "$EVAL_MODEL_PORT" > "$EVAL_LOG" 2>&1 &
+    --port "$EVAL_MODEL_PORT" \
+    --watchdog-timeout 600 > "$EVAL_LOG" 2>&1 &
 EVAL_MODEL_PID=$!
 
 echo "  Small model server PID: $SMALL_MODEL_PID  ->  $SMALL_LOG"

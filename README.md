@@ -58,7 +58,17 @@ cd ..
 
 This installs SGLang 0.4.3.post4 from the bundled source (`third_party/sglang-0.4.3.post4/python`) and all other dependencies.
 
-**5. Verify installation**
+**5. Pre-compile FlashInfer kernels (recommended for H100/H200)**
+
+On first run, FlashInfer JIT-compiles CUDA kernels which can take minutes or hang. Pre-compile them once:
+
+```bash
+bash scripts/precompile_kernels.sh
+```
+
+> **Note:** If `nvcc` version (e.g. 12.9) differs from PyTorch's bundled CUDA runtime (e.g. 12.4), this script automatically patches `libcudart.so.12` to avoid `undefined symbol` errors. See [docs/FLASHINFER_WARMUP.md](docs/FLASHINFER_WARMUP.md) for details.
+
+**6. Verify installation**
 
 ```bash
 python -c "import sglang; print('sglang version:', sglang.__version__); from sglang import Engine; print('OK')"
