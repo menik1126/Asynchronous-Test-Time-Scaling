@@ -23,6 +23,22 @@ small_model_name = ""
 eval_model_name = ""
 tokenizer = None
 small_tokenizer = None
+max_retries = 3
+
+
+async def _post_with_retry(client, url, json):
+    for attempt in range(max_retries):
+        try:
+            resp = await client.post(url, json=json)
+            resp.raise_for_status()
+            return resp
+        except (httpx.ReadError, httpx.ConnectError, httpx.RemoteProtocolError) as e:
+            if attempt < max_retries - 1:
+                wait = 2 * (attempt + 1)
+                print(f"[Retry {attempt+1}/{max_retries}] {type(e).__name__}, retrying in {wait}s...", flush=True)
+                await asyncio.sleep(wait)
+            else:
+                raise
 
 
 def build_debug_prompt():
@@ -109,11 +125,7 @@ async def call_small_model(prompt, turn, max_tokens, idx, port, temperature):
     }
 
     async with small_model_semaphore:
-        resp = await client_small.post(
-            f"http://127.0.0.1:{port}/v1/chat/completions",
-            json=payload,
-        )
-        resp.raise_for_status()
+        resp = await _post_with_retry(client_small, f"http://127.0.0.1:{port}/v1/chat/completions", payload)
         return resp.json()["choices"][0]["message"]["content"]
 
 
@@ -128,11 +140,7 @@ async def call_eval_model(prompt, max_tokens, idx, port, temperature):
     }
 
     async with eval_model_semaphore:
-        resp = await client_eval.post(
-            f"http://127.0.0.1:{port}/v1/chat/completions",
-            json=payload,
-        )
-        resp.raise_for_status()
+        resp = await _post_with_retry(client_eval, f"http://127.0.0.1:{port}/v1/chat/completions", payload)
         return resp.json()["choices"][0]["message"]["content"]
 
 
@@ -163,11 +171,7 @@ async def call_eval_model_ppl(prompt, idx, port):
 
     global eval_model_semaphore
     async with eval_model_semaphore:
-        resp = await client_eval.post(
-            f"http://127.0.0.1:{port}/generate",
-            json=payload,
-        )
-        resp.raise_for_status()
+        resp = await _post_with_retry(client_eval, f"http://127.0.0.1:{port}/generate", payload)
         data = resp.json()
         input_token_logprobs = data["meta_info"]["input_token_logprobs"][1:]
         logprobs = [entry[0] for entry in input_token_logprobs if entry[0] is not None]
@@ -391,12 +395,19 @@ async def main():
         default=8,
         help="Concurrency limit for evaluation model requests.",
     )
+    parser.add_argument(
+        "--max_retries",
+        type=int,
+        default=3,
+        help="Max retries for HTTP requests on connection errors.",
+    )
 
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    global client_small, client_eval, small_model_name, eval_model_name, tokenizer, small_tokenizer, small_model_semaphore, eval_model_semaphore
+    global client_small, client_eval, small_model_name, eval_model_name, tokenizer, small_tokenizer, small_model_semaphore, eval_model_semaphore, max_retries
+    max_retries = args.max_retries
     small_model_name = args.small_model_name
     eval_model_name = args.eval_model_name
 

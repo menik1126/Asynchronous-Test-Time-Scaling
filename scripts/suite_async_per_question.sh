@@ -55,6 +55,9 @@ EVAL_MODEL_TEMPERATURE=0.8
 SMALL_MODEL_CONCURRENCY=16
 EVAL_MODEL_CONCURRENCY=4
 
+# HTTP请求重试次数
+MAX_RETRIES=3
+
 # --- 定义所有要运行的配置数组 ---
 # PPL文件名格式: ppls_{dataset}_{eval_model}_{small_model}_s{SAMPLE_SIZE}_t{SMALL_MODEL_MAX_TOKENS}_temp{SMALL_MODEL_TEMPERATURE}_per_question.npy
 # PPL filename helper: auto-generates path from DATASET, EVAL_SHORT, SMALL_SHORT
@@ -191,6 +194,7 @@ for config in "${CONFIGS[@]}"; do
         --eval_model_temperature "$EVAL_MODEL_TEMPERATURE" \
         --small_model_concurrency "$SMALL_MODEL_CONCURRENCY" \
         --eval_model_concurrency "$EVAL_MODEL_CONCURRENCY" \
+        --max_retries "$MAX_RETRIES" \
         --repeats "$SAMPLE_SIZE" > "$EVAL_SCRIPT_LOG" 2>&1 &
     EVAL_SCRIPT_PID=$!
     echo "Evaluation script started with PID: $EVAL_SCRIPT_PID"
