@@ -10,7 +10,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 PPL_OUTPUT_DIR="${PROJECT_DIR}/evaluation"
 mkdir -p "$PPL_OUTPUT_DIR"
 #export HF_ENDPOINT=https://hf-mirror.com
-export HF_TOKEN=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
+export HF_TOKEN=your-hf-token
 
 # --- 检查 wait-for-it.sh 脚本是否存在 ---
 if [ ! -f "$SCRIPT_DIR/wait-for-it.sh" ]; then

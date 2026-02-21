@@ -286,7 +286,8 @@ async def compute_score(results, answers, repeats):
     generated_ans = [ans for ans, _ in results]
     group = len(generated_ans) // repeats
     right = 0
-    for i in range(group):
+    pbar = sync_tqdm(range(group), desc="Evaluating", unit="question")
+    for i in pbar:
         start = i * repeats
         end = (i + 1) * repeats
         outputs = generated_ans[start:end]
@@ -297,6 +298,7 @@ async def compute_score(results, answers, repeats):
         print(ans)
         if ans == "Match":
             right += 1
+        pbar.set_postfix(acc=f"{right/(i+1):.2%}")
 
     print(f"Accuracy: {right / group:.2%}")
 
@@ -408,6 +410,8 @@ async def main():
 
     global client_small, client_eval, small_model_name, eval_model_name, tokenizer, small_tokenizer, small_model_semaphore, eval_model_semaphore, max_retries
     max_retries = args.max_retries
+
+
     small_model_name = args.small_model_name
     eval_model_name = args.eval_model_name
 

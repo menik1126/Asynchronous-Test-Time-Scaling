@@ -10,7 +10,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 PPL_OUTPUT_DIR="${PROJECT_DIR}/evaluation"
 mkdir -p "$PPL_OUTPUT_DIR"
 # export HF_ENDPOINT=https://hf-mirror.com
-export HF_TOKEN=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
+export HF_TOKEN=your-hf-token
 
 # --- 检查 wait-for-it.sh 脚本是否存在 ---
 if [ ! -f "$SCRIPT_DIR/wait-for-it.sh" ]; then
@@ -57,6 +57,11 @@ EVAL_MODEL_CONCURRENCY=4
 
 # HTTP请求重试次数
 MAX_RETRIES=3
+
+# OpenAI API 配置（用于 anyone_check 答案评判，与 EVAL_MODEL 独立配置）
+export OPENAI_API_KEY="your-openai-api-key"
+export OPENAI_BASE_URL="https://api.openai.com/v1"
+export OPENAI_MODEL="gpt-5.2"
 
 # --- 定义所有要运行的配置数组 ---
 # PPL文件名格式: ppls_{dataset}_{eval_model}_{small_model}_s{SAMPLE_SIZE}_t{SMALL_MODEL_MAX_TOKENS}_temp{SMALL_MODEL_TEMPERATURE}_per_question.npy

@@ -315,6 +315,12 @@ async def main():
     os.makedirs(output_dir, exist_ok=True)
     print(f"Saving results to: {output_dir}")
 
+    setup_judge(
+        base_url=f"http://127.0.0.1:{args.sglang_port}/v1",
+        api_key="None",
+        model=args.small_model_name,
+    )
+
     small_tokenizer = AutoTokenizer.from_pretrained(args.small_model_name)
     small_tokenizer.use_default_system_prompt = True
 
