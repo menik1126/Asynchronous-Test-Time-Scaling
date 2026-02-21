@@ -1,10 +1,11 @@
 from openai import AsyncOpenAI, APITimeoutError
 import asyncio
 import logging
+import os
 
-openai_key = ""
-openai_base = ""
-openai_model = ""
+openai_key = os.environ.get("OPENAI_API_KEY", "")
+openai_base = os.environ.get("OPENAI_BASE_URL") or None
+openai_model = os.environ.get("OPENAI_MODEL", "gpt-5.2")
 
 anyone_check_prompt = """
 You are a mathematics expert with deep understanding of mathematical expressions and notation.

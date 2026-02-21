@@ -1,7 +1,7 @@
 #!/bin/bash
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 #export HF_ENDPOINT=https://hf-mirror.com
-export HF_TOKEN=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
+export HF_TOKEN=your-hf-token
 
 # --- 检查 wait-for-it.sh 脚本是否存在 ---
 if [ ! -f "$SCRIPT_DIR/wait-for-it.sh" ]; then

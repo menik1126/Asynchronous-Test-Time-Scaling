@@ -338,6 +338,12 @@ async def main():
     os.makedirs(args.output_dir, exist_ok=True)
 
     global client_small, client_eval, small_model_name, eval_model_name, tokenizer, small_tokenizer
+    setup_judge(
+        base_url=f"http://127.0.0.1:{args.eval_model_port}/v1",
+        api_key="None",
+        model=args.eval_model_name,
+    )
+
     small_model_name = args.small_model_name
     eval_model_name = args.eval_model_name
 
