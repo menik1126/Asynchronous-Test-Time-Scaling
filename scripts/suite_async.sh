@@ -51,6 +51,9 @@ SMALL_MODEL_CONFORMAL_TEMPERATURE=0.8
 # 大模型采样温度配置
 EVAL_MODEL_TEMPERATURE=0.8
 
+# 评估模型是否使用 chat template (1=使用, 0=不使用) 默认0
+USE_EVAL_CHAT_TEMPLATE=1
+
 # 并发数量配置
 SMALL_MODEL_CONCURRENCY=16
 EVAL_MODEL_CONCURRENCY=4
@@ -59,10 +62,10 @@ EVAL_MODEL_CONCURRENCY=4
 MAX_RETRIES=3
 
 # 答案抽取模式: "regex" 使用正则匹配, "llm" 使用LLM抽取
-EXTRACT_MODE="llm" #"regex"
+EXTRACT_MODE="regex" #"regex"
 
 # OpenAI API 配置（用于 anyone_check 答案评判，与 EVAL_MODEL 独立配置）
-export OPENAI_API_KEY=""
+export OPENAI_API_KEY="sk-f7Oh115pfz6REQeFKesLFOhrk85Yd8ySvnqmRDZ08oDT8nyr"
 export OPENAI_BASE_URL="https://chatapi.littlewheat.com/v1"
 export OPENAI_MODEL="gpt-5.2"
 
@@ -100,7 +103,7 @@ for config in "${CONFIGS[@]}"; do
 
 
     # Auto-generate PPL output path from dataset + model short names
-    PPL_ARRAY_PATH="${PPL_OUTPUT_DIR}/ppls_${DATASET_NAME}_${EVAL_SHORT}_${SMALL_SHORT}_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy"
+    PPL_ARRAY_PATH="${PPL_OUTPUT_DIR}/ppls_${DATASET_NAME}_${EVAL_SHORT}_${SMALL_SHORT}_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}_ct${USE_EVAL_CHAT_TEMPLATE}.npy"
 
     # 根据配置生成动态日志和输出目录名
     small_model_name_base=$(echo "$SMALL_MODEL" | tr '/' '_')
@@ -109,7 +112,7 @@ for config in "${CONFIGS[@]}"; do
     # 构建包含超参数的标识符
     run_identifier="${small_model_name_base}_${eval_model_name_base}_${DATASET_NAME}"
     #hyperparams_suffix="sm${SMALL_MODEL_MAX_TOKENS}_em${EVALATOR_MAX_TOKENS}_t${EVAL_TURNS}_smt${SMALL_MODEL_TEMPERATURE}_emt${EVAL_MODEL_TEMPERATURE}_smc${SMALL_MODEL_CONCURRENCY}_emc${EVAL_MODEL_CONCURRENCY}"
-    hyperparams_suffix="sm${SMALL_MODEL_MAX_TOKENS}_em${EVALATOR_MAX_TOKENS}_t${EVAL_TURNS}_smt${SMALL_MODEL_TEMPERATURE}_sct${SMALL_MODEL_CONFORMAL_TEMPERATURE}_emt${EVAL_MODEL_TEMPERATURE}_smc${SMALL_MODEL_CONCURRENCY}_emc${EVAL_MODEL_CONCURRENCY}"
+    hyperparams_suffix="sm${SMALL_MODEL_MAX_TOKENS}_em${EVALATOR_MAX_TOKENS}_t${EVAL_TURNS}_smt${SMALL_MODEL_TEMPERATURE}_sct${SMALL_MODEL_CONFORMAL_TEMPERATURE}_emt${EVAL_MODEL_TEMPERATURE}_smc${SMALL_MODEL_CONCURRENCY}_emc${EVAL_MODEL_CONCURRENCY}_ct${USE_EVAL_CHAT_TEMPLATE}"
     # 定义输出目录路径
     OUTPUT_DIR="./results/${run_identifier}_${hyperparams_suffix}"
     
@@ -133,6 +136,7 @@ for config in "${CONFIGS[@]}"; do
     echo "  - Eval Model Temperature:  $EVAL_MODEL_TEMPERATURE"
     echo "  - Small Model Concurrency: $SMALL_MODEL_CONCURRENCY"
     echo "  - Eval Model Concurrency:  $EVAL_MODEL_CONCURRENCY"
+    echo "  - Eval Chat Template:      $USE_EVAL_CHAT_TEMPLATE"
     echo "  - Extract Mode:            $EXTRACT_MODE"
     echo "  - Output Directory:        $OUTPUT_DIR"
     echo "  - Hyperparams Suffix:      $hyperparams_suffix"
@@ -187,6 +191,11 @@ for config in "${CONFIGS[@]}"; do
     sleep 10
 
     # --- 运行 Python 评估脚本，并将输出重定向到日志文件 ---
+    CHAT_TEMPLATE_FLAG=""
+    if [ "$USE_EVAL_CHAT_TEMPLATE" = "1" ]; then
+        CHAT_TEMPLATE_FLAG="--use_chat_template"
+    fi
+
     echo "Starting evaluation script in the background, output will be logged to $EVAL_SCRIPT_LOG..."
     env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_PROXY \
         python3 -m ATTS.ref_async \
@@ -206,7 +215,8 @@ for config in "${CONFIGS[@]}"; do
         --eval_model_concurrency "$EVAL_MODEL_CONCURRENCY" \
         --max_retries "$MAX_RETRIES" \
         --extract_mode "$EXTRACT_MODE" \
-        --repeats "$SAMPLE_SIZE" > "$EVAL_SCRIPT_LOG" 2>&1 &
+        --repeats "$SAMPLE_SIZE" \
+        $CHAT_TEMPLATE_FLAG > "$EVAL_SCRIPT_LOG" 2>&1 &
     EVAL_SCRIPT_PID=$!
     echo "Evaluation script started with PID: $EVAL_SCRIPT_PID"
 

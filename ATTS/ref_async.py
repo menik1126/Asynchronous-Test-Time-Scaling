@@ -25,6 +25,7 @@ tokenizer = None
 small_tokenizer = None
 max_retries = 3
 extract_mode = "regex"
+use_chat_template = False
 
 
 async def _post_with_retry(client, url, json):
@@ -146,8 +147,21 @@ async def call_eval_model(prompt, max_tokens, idx, port, temperature):
 
 
 async def call_eval_model_ppl(prompt, idx, port):
-    global client_eval, tokenizer
-    message = build_eval_prompt_for_eval(prompt[0], prompt[1])
+    global client_eval, tokenizer, use_chat_template
+
+    if use_chat_template:
+        history_text = "\n\n".join([f"{h}" for h in prompt[1]])
+        messages = [
+            {"role": "system", "content": "You are a math expert."},
+            {"role": "user", "content": build_question(prompt[0])},
+            {"role": "assistant", "content": history_text},
+        ]
+        message = tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=False
+        )
+    else:
+        message = build_eval_prompt_for_eval(prompt[0], prompt[1])
+
     last_history_item = prompt[1][-1].strip("\n")
 
     position = message.find(last_history_item)
@@ -480,14 +494,21 @@ async def main():
         default="regex",
         help="Answer extraction mode: 'regex' for pattern matching, 'llm' for LLM-based extraction.",
     )
+    parser.add_argument(
+        "--use_chat_template",
+        action="store_true",
+        default=False,
+        help="Apply chat template when building eval model prompts for PPL.",
+    )
 
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    global client_small, client_eval, small_model_name, eval_model_name, tokenizer, small_tokenizer, small_model_semaphore, eval_model_semaphore, max_retries, extract_mode
+    global client_small, client_eval, small_model_name, eval_model_name, tokenizer, small_tokenizer, small_model_semaphore, eval_model_semaphore, max_retries, extract_mode, use_chat_template
     max_retries = args.max_retries
     extract_mode = args.extract_mode
+    use_chat_template = args.use_chat_template
 
 
     small_model_name = args.small_model_name

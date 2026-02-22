@@ -10,7 +10,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 PPL_OUTPUT_DIR="${PROJECT_DIR}/evaluation"
 mkdir -p "$PPL_OUTPUT_DIR"
 #export HF_ENDPOINT=https://hf-mirror.com
-export HF_TOKEN=your-hf-token
+# export HF_TOKEN=your-hf-token
 
 # --- 检查 wait-for-it.sh 脚本是否存在 ---
 if [ ! -f "$SCRIPT_DIR/wait-for-it.sh" ]; then
@@ -34,6 +34,9 @@ SMALL_MODEL_MAX_TOKENS=500
 
 # 小模型采样温度配置
 SMALL_MODEL_TEMPERATURE=0.8
+
+# 评估模型是否使用 chat template (1=使用, 0=不使用) , 之前是不使用
+USE_EVAL_CHAT_TEMPLATE=1
 
 # 最大并发请求数
 MAX_CONCURRENT=16
@@ -91,7 +94,7 @@ for config in "${CONFIGS[@]}"; do
     read SMALL_MODEL EVAL_MODEL DATASET_NAME EVAL_SHORT SMALL_SHORT CONFIG_SMALL_MODEL_MAX_TOKENS <<< "$config"
 
     # Auto-generate PPL output path from dataset + model short names
-    PPL_ARRAY_PATH="${PPL_OUTPUT_DIR}/ppls_${DATASET_NAME}_${EVAL_SHORT}_${SMALL_SHORT}_s${SAMPLE_SIZE}_t${CONFIG_SMALL_MODEL_MAX_TOKENS:-$SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy"
+    PPL_ARRAY_PATH="${PPL_OUTPUT_DIR}/ppls_${DATASET_NAME}_${EVAL_SHORT}_${SMALL_SHORT}_s${SAMPLE_SIZE}_t${CONFIG_SMALL_MODEL_MAX_TOKENS:-$SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}_ct${USE_EVAL_CHAT_TEMPLATE}.npy"
 
     # 根据配置生成动态日志文件名，并添加 "conformal" 前缀
     small_model_name_base=$(echo "$SMALL_MODEL" | tr '/' '_')
@@ -109,6 +112,7 @@ for config in "${CONFIGS[@]}"; do
     echo "  - Small Model Max Tokens: ${CONFIG_SMALL_MODEL_MAX_TOKENS:-$SMALL_MODEL_MAX_TOKENS}"
     echo "  - Small Model Temperature: $SMALL_MODEL_TEMPERATURE"
     echo "  - Sample Size: $SAMPLE_SIZE"
+    echo "  - Eval Chat Template: $USE_EVAL_CHAT_TEMPLATE"
     echo "===================================================================================="
 
     # --- 启动 SGLang 服务器 ---
@@ -161,6 +165,11 @@ for config in "${CONFIGS[@]}"; do
 
     # --- 运行 Python 评估脚本 ---
     echo "Starting evaluation script..."
+    CHAT_TEMPLATE_FLAG=""
+    if [ "$USE_EVAL_CHAT_TEMPLATE" = "1" ]; then
+        CHAT_TEMPLATE_FLAG="--use_chat_template"
+    fi
+
     env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_PROXY \
         python3 -m ATTS.ref_conformal \
         --small_model_name "$SMALL_MODEL" \
@@ -172,7 +181,8 @@ for config in "${CONFIGS[@]}"; do
         --sample_size "$SAMPLE_SIZE" \
         --max_concurrent "$MAX_CONCURRENT" \
         --small_model_max_tokens "${CONFIG_SMALL_MODEL_MAX_TOKENS:-$SMALL_MODEL_MAX_TOKENS}" \
-        --small_model_temperature "$SMALL_MODEL_TEMPERATURE"
+        --small_model_temperature "$SMALL_MODEL_TEMPERATURE" \
+        $CHAT_TEMPLATE_FLAG
     
     # 检查评估脚本是否成功运行
     if [ $? -eq 0 ]; then
