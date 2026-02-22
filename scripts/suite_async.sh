@@ -65,7 +65,7 @@ MAX_RETRIES=3
 EXTRACT_MODE="regex" #"regex"
 
 # OpenAI API 配置（用于 anyone_check 答案评判，与 EVAL_MODEL 独立配置）
-export OPENAI_API_KEY="sk-f7Oh115pfz6REQeFKesLFOhrk85Yd8ySvnqmRDZ08oDT8nyr"
+export OPENAI_API_KEY=""
 export OPENAI_BASE_URL="https://chatapi.littlewheat.com/v1"
 export OPENAI_MODEL="gpt-5.2"
 
