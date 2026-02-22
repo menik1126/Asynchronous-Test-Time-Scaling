@@ -248,6 +248,51 @@ Edit variables in the shell scripts to customize:
 - `SMALL_MODEL_TEMPERATURE`: Sampling temperature (default: 0.8)
 - `CUDA_VISIBLE_DEVICES`: GPU allocation
 
+### Server Configuration
+
+| Variable | Default | Description |
+|---|---|---|
+| `SGLANG_HOST` | `0.0.0.0` | Host address for SGLang servers |
+| `SMALL_MODEL_PORT` | `52100` | Port for the small (draft) model server |
+| `EVAL_MODEL_PORT` | `52101` | Port for the evaluation (target) model server |
+| `SMALL_MODEL_DEVICE` | `"2"` | CUDA device ID for the small model (single GPU) |
+| `EVAL_MODEL_DEVICES` | `"3,4"` | CUDA device IDs for the eval model (supports multi-GPU tensor parallelism) |
+
+### Sampling & Generation
+
+| Variable | Default | Description |
+|---|---|---|
+| `SAMPLE_SIZE` | `16` | Number of repeated samples per question (pass@k evaluation) |
+| `DEFAULT_TURNS` | `15` | Maximum number of small-model/eval-model interaction turns per sample. Can be overridden per-config in `CONFIGS` |
+| `SMALL_MODEL_MAX_TOKENS` | `500` | Maximum number of tokens the small model generates per turn |
+| `EVAL_MODEL_MAX_TOKENS` | `500` | Maximum number of tokens the eval model generates per turn (when PPL percentile exceeds threshold) |
+| `SMALL_MODEL_TEMPERATURE` | `0.8` | Sampling temperature for the small model |
+| `SMALL_MODEL_CONFORMAL_TEMPERATURE` | `0.8` | Temperature used during conformal PPL calibration (used in log/output file naming to match the corresponding PPL array) |
+| `EVAL_MODEL_TEMPERATURE` | `0.8` | Sampling temperature for the eval model |
+
+### Eval Model Prompt Format
+
+| Variable | Default | Description |
+|---|---|---|
+| `USE_EVAL_CHAT_TEMPLATE` | `1` | Whether the eval model applies the tokenizer's chat template when computing PPL. `1` = apply chat template (messages formatted with `<\|im_start\|>` / `<\|im_end\|>` etc.), `0` = use raw text concatenation. This value is also appended to output paths as `_ct{0\|1}` for easy differentiation |
+
+### Concurrency & Reliability
+
+| Variable | Default | Description |
+|---|---|---|
+| `SMALL_MODEL_CONCURRENCY` | `16` | Maximum number of concurrent requests to the small model |
+| `EVAL_MODEL_CONCURRENCY` | `4` | Maximum number of concurrent requests to the eval model |
+| `MAX_RETRIES` | `3` | Number of HTTP request retries on connection errors |
+
+### Answer Extraction
+
+| Variable | Default | Description |
+|---|---|---|
+| `EXTRACT_MODE` | `"llm"` | Answer extraction mode. `"regex"`: extract via `\boxed{}` / `ANSWER: X` pattern matching. `"llm"`: use an external LLM (configured below) for more robust extraction |
+| `OPENAI_API_KEY` | `""` | API key for the OpenAI-compatible endpoint used by `anyone_check` answer evaluation and LLM-based extraction |
+| `OPENAI_BASE_URL` | `"https://..."` | Base URL for the OpenAI-compatible API |
+| `OPENAI_MODEL` | `"gpt-5.2"` | Model name used for answer evaluation and extraction |
+
 ---
 
 ## 🧪 Testing the Baselines
