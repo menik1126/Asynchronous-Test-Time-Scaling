@@ -59,14 +59,15 @@ CONFIGS=(
     # "Qwen/Qwen2.5-7B-Instruct Qwen/Qwen2.5-32B-Instruct aime25 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_aime25_64_qwen_32_qwen_7.npy"
     # "Qwen/Qwen2.5-7B-Instruct Qwen/Qwen2.5-32B-Instruct math500 /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_math500_64_qwen_32_qwen_7.npy"
     # "Qwen/Qwen2.5-7B-Instruct Qwen/Qwen2.5-32B-Instruct gpqa /zju_0038/xj/sglang-parallel-test-time-scaling/ppls_gpqa_64_qwen_32_qwen_7.npy"
-    "deepseek-ai/DeepSeek-R1-Distill-Llama-8B simplescaling/s1.1-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_s1.1_32B_rllama_8B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
-    "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B simplescaling/s1.1-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_s1.1_32B_r1_1B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
-    "Qwen/Qwen2.5-7B-Instruct simplescaling/s1.1-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_s1.1_32B_qwen_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
-    "meta-llama/Llama-3.1-8B-Instruct simplescaling/s1.1-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_s1.1_32B_llama_8B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
-    "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_qwq_32B_rllama_8B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
-    "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B Qwen/QwQ-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_qwq_32B_r1_1B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
-    "Qwen/Qwen2.5-7B-Instruct Qwen/QwQ-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_qwq_32B_qwen_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
-    "meta-llama/Llama-3.1-8B-Instruct Qwen/QwQ-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_qwq_32B_llama_8B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B simplescaling/s1.1-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_s1.1_32B_rllama_8B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
+    # "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B simplescaling/s1.1-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_s1.1_32B_r1_1B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
+    # "Qwen/Qwen2.5-7B-Instruct simplescaling/s1.1-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_s1.1_32B_qwen_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
+    # "meta-llama/Llama-3.1-8B-Instruct simplescaling/s1.1-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_s1.1_32B_llama_8B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
+    # "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_qwq_32B_rllama_8B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
+    # "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B Qwen/QwQ-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_qwq_32B_r1_1B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
+    # "Qwen/Qwen2.5-7B-Instruct Qwen/QwQ-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_qwq_32B_qwen_7B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
+    #"meta-llama/Llama-3.1-8B-Instruct Qwen/QwQ-32B olympiad /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_olympiad_qwq_32B_llama_8B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
+    "deepseek-ai/DeepSeek-R1-Distill-Llama-8B Qwen/QwQ-32B math500 /home/xiongjing/qj/sglang-parallel-test-time-scaling/evaluation/ppls_math500_qwq_32B_rllama_8B_s${SAMPLE_SIZE}_t${SMALL_MODEL_MAX_TOKENS}_temp${SMALL_MODEL_TEMPERATURE}.npy $SMALL_MODEL_MAX_TOKENS"
 )
 
 
@@ -95,7 +96,9 @@ for config in "${CONFIGS[@]}"; do
 
     # --- 启动 SGLang 服务器 ---
     echo "Starting SGLang server for small model ($SMALL_MODEL)..."
-    CUDA_VISIBLE_DEVICES=$SMALL_MODEL_DEVICE python3 -m sglang.launch_server \
+    env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_PROXY \
+        HF_HUB_OFFLINE=1 \
+        CUDA_VISIBLE_DEVICES=$SMALL_MODEL_DEVICE python3 -m sglang.launch_server \
         --model-path "$SMALL_MODEL" \
         --tp 1 \
         --mem-fraction-static 0.9 \
@@ -105,7 +108,9 @@ for config in "${CONFIGS[@]}"; do
     echo "Small model server started with PID: $SMALL_MODEL_PID"
 
     echo "Starting SGLang server for evaluation model ($EVAL_MODEL)..."
-    CUDA_VISIBLE_DEVICES=$EVAL_MODEL_DEVICES python3 -m sglang.launch_server \
+    env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_PROXY \
+        HF_HUB_OFFLINE=1 \
+        CUDA_VISIBLE_DEVICES=$EVAL_MODEL_DEVICES python3 -m sglang.launch_server \
         --model-path "$EVAL_MODEL" \
         --tp 2 \
         --mem-fraction-static 0.9 \

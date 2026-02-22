@@ -53,7 +53,9 @@ wait_for_server() {
 # --- Launch Small Model Server ---
 echo ""
 echo "Starting SGLang server for small model ($SMALL_MODEL)..."
-CUDA_VISIBLE_DEVICES=$SMALL_MODEL_DEVICE python3 -m sglang.launch_server \
+env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_PROXY \
+    HF_HUB_OFFLINE=1 \
+    CUDA_VISIBLE_DEVICES=$SMALL_MODEL_DEVICE python3 -m sglang.launch_server \
     --model-path "$SMALL_MODEL" \
     --tp 1 \
     --mem-fraction-static $MEM_FRACTION \
@@ -66,7 +68,9 @@ echo "Logs: small_model_server.log"
 # --- Launch Evaluation Model Server ---
 echo ""
 echo "Starting SGLang server for evaluation model ($EVAL_MODEL)..."
-CUDA_VISIBLE_DEVICES=$EVAL_MODEL_DEVICES python3 -m sglang.launch_server \
+env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_PROXY \
+    HF_HUB_OFFLINE=1 \
+    CUDA_VISIBLE_DEVICES=$EVAL_MODEL_DEVICES python3 -m sglang.launch_server \
     --model-path "$EVAL_MODEL" \
     --tp $EVAL_TP \
     --mem-fraction-static $MEM_FRACTION \
