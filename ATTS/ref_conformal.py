@@ -17,6 +17,7 @@ eval_model = None
 small_model_name = ""
 eval_model_name = ""
 tokenizer = None
+use_chat_template = False
 
 
 def build_question(question):
@@ -75,8 +76,20 @@ def build_eval_prompt(question, history):
 
 
 async def call_eval_model_ppl(prompt, eval_model_port):
-    global tokenizer
-    message = build_eval_prompt(prompt[0], prompt[1])
+    global tokenizer, use_chat_template
+
+    if use_chat_template:
+        history_text = "\n\n".join([f"{h}" for h in prompt[1]])
+        messages = [
+            {"role": "system", "content": "You are a math expert."},
+            {"role": "user", "content": build_question(prompt[0])},
+            {"role": "assistant", "content": history_text},
+        ]
+        message = tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=False
+        )
+    else:
+        message = build_eval_prompt(prompt[0], prompt[1])
 
     last_history_item = prompt[1][-1].strip("\n")
 
@@ -219,12 +232,19 @@ async def main():
         default=0.7,
         help="Temperature for the small model generation.",
     )
+    parser.add_argument(
+        "--use_chat_template",
+        action="store_true",
+        default=False,
+        help="Apply chat template when building eval model prompts.",
+    )
 
     args = parser.parse_args()
 
-    global small_model, eval_model, small_model_name, eval_model_name, tokenizer
+    global small_model, eval_model, small_model_name, eval_model_name, tokenizer, use_chat_template
     small_model_name = args.small_model_name
     eval_model_name = args.eval_model_name
+    use_chat_template = args.use_chat_template
 
     small_model = openai.Client(
         base_url=f"http://127.0.0.1:{args.small_model_port}/v1", api_key="None"

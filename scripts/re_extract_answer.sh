@@ -7,7 +7,7 @@ export OPENAI_API_KEY=""
 export OPENAI_BASE_URL="https://chatapi.littlewheat.com/v1"
 export OPENAI_MODEL="gpt-5.2"
 
-INPUT_DIR="$PROJECT_DIR/results/deepseek-ai_DeepSeek-R1-Distill-Llama-8B_Qwen_QwQ-32B_math500_sm500_em500_t15_smt0.8_sct0.8_emt0.8_smc16_emc4"
+INPUT_DIR="$PROJECT_DIR/results/deepseek-ai_DeepSeek-R1-Distill-Llama-8B_Qwen_QwQ-32B_math500_sm500_em500_t15_smt0.8_sct0.8_emt0.8_smc16_emc4_ct1"
 
 DATASET_NAME="math500"
 REPEATS=16
