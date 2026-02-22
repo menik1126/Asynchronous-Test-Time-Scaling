@@ -180,6 +180,44 @@ python -m ATTS.ref_async_per_question \
 
 > **Note:** All suite scripts automatically handle SGLang server lifecycle (start → calibrate/evaluate → stop) for each model configuration. Edit the `CONFIGS` array and configuration variables inside each script to customize models, datasets, GPUs, and hyperparameters.
 
+### 3. Re-extract Answers with LLM & Recompute Accuracy
+
+After evaluation completes, the default answer extraction uses regex (`\boxed{}` / `ANSWER: X`). You can use a stronger LLM to re-extract answers from the saved reasoning history and recompute accuracy:
+
+```bash
+bash scripts/re_extract_answer.sh
+```
+
+This script:
+1. Reads all `problem_XXXX.json` files from the results directory
+2. Re-extracts `final_answer` using an LLM (via OpenAI-compatible API)
+3. Computes accuracy against ground-truth using `anyone_check`
+
+**Configuration** — edit `scripts/re_extract_answer.sh`:
+```bash
+OPENAI_API_KEY="your-api-key"
+OPENAI_BASE_URL="https://your-api-endpoint/v1"
+OPENAI_MODEL="gpt-4o"
+DATASET_NAME="math500"   # must match the dataset used during evaluation
+REPEATS=16               # must match the repeats used during evaluation
+```
+
+You can also run it directly:
+
+```bash
+export OPENAI_API_KEY="your-key"
+export OPENAI_BASE_URL="https://your-api-endpoint/v1"
+export OPENAI_MODEL="gpt-4o"
+
+python -m ATTS.re_extract \
+    --input_dir "./results/<your_result_dir>" \
+    --dataset_name math500 \
+    --repeats 16 \
+    --concurrency 32
+```
+
+Add `--dry_run` to preview without modifying files.
+
 ## 📊 Supported Datasets
 
 - AIME24, AIME25

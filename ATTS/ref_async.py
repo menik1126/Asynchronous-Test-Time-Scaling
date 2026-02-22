@@ -24,6 +24,7 @@ eval_model_name = ""
 tokenizer = None
 small_tokenizer = None
 max_retries = 3
+extract_mode = "regex"
 
 
 async def _post_with_retry(client, url, json):
@@ -184,7 +185,7 @@ async def call_eval_model_ppl(prompt, idx, port):
         return math.exp(avg_neg_logprob)
 
 
-async def extract_answer(history):
+async def extract_answer_regex(history):
     answer = "invalid"
     temp = "\n\n".join([f"{history[i]}" for i in range(len(history))])
 
@@ -198,6 +199,75 @@ async def extract_answer(history):
             answer = matches[-1]
 
     return answer
+
+
+EXTRACT_ANSWER_LLM_PROMPT = """You are tasked with extracting the final answer from a mathematical reasoning process.
+
+Below is the reasoning history. Please identify and extract ONLY the final answer.
+
+Rules:
+- If the answer is inside \\boxed{{}}, extract the content within.
+- If it is a multiple-choice question, return only the letter (A, B, C, or D).
+- If it is a numerical answer, return only the number.
+- Return ONLY the answer itself, nothing else. No explanation, no extra text.
+- If you cannot find a clear answer, return exactly: invalid
+
+Reasoning history:
+{history}
+
+Final answer:"""
+
+
+async def extract_answer_llm(history):
+    from openai import AsyncOpenAI, APITimeoutError
+
+    openai_key = os.environ.get("OPENAI_API_KEY", "")
+    openai_base = os.environ.get("OPENAI_BASE_URL") or None
+    openai_model = os.environ.get("OPENAI_MODEL", "gpt-5.2")
+
+    temp = "\n\n".join([f"{history[i]}" for i in range(len(history))])
+
+    client = AsyncOpenAI(api_key=openai_key, base_url=openai_base)
+    prompt_text = EXTRACT_ANSWER_LLM_PROMPT.format(history=temp)
+
+    retries = 3
+    delay = 1
+    for attempt in range(retries):
+        try:
+            response = await client.chat.completions.create(
+                model=openai_model,
+                messages=[
+                    {"role": "system", "content": "You are a precise answer extractor."},
+                    {"role": "user", "content": prompt_text},
+                ],
+                temperature=0.0,
+                max_tokens=50,
+            )
+            print("--------------------------------")
+            print("extract_answer_llm response: ", response.choices[0].message.content.strip())
+            print("--------------------------------")
+            result = response.choices[0].message.content.strip()
+            return result if result and result.lower() != "invalid" else "invalid"
+        except APITimeoutError:
+            if attempt < retries - 1:
+                wait = delay * (2 ** attempt)
+                print(f"[extract_answer_llm] Timeout, retrying in {wait}s...", flush=True)
+                await asyncio.sleep(wait)
+            else:
+                print("[extract_answer_llm] All retries exhausted.", flush=True)
+                return "invalid"
+        except Exception as e:
+            print(f"[extract_answer_llm] Error: {e}", flush=True)
+            return "invalid"
+
+    return "invalid"
+
+
+async def extract_answer(history):
+    global extract_mode
+    if extract_mode == "llm":
+        return await extract_answer_llm(history)
+    return await extract_answer_regex(history)
 
 
 async def process_single_problem(
@@ -403,13 +473,21 @@ async def main():
         default=3,
         help="Max retries for HTTP requests on connection errors.",
     )
+    parser.add_argument(
+        "--extract_mode",
+        type=str,
+        choices=["regex", "llm"],
+        default="regex",
+        help="Answer extraction mode: 'regex' for pattern matching, 'llm' for LLM-based extraction.",
+    )
 
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    global client_small, client_eval, small_model_name, eval_model_name, tokenizer, small_tokenizer, small_model_semaphore, eval_model_semaphore, max_retries
+    global client_small, client_eval, small_model_name, eval_model_name, tokenizer, small_tokenizer, small_model_semaphore, eval_model_semaphore, max_retries, extract_mode
     max_retries = args.max_retries
+    extract_mode = args.extract_mode
 
 
     small_model_name = args.small_model_name
