@@ -58,9 +58,12 @@ EVAL_MODEL_CONCURRENCY=4
 # HTTP请求重试次数
 MAX_RETRIES=3
 
+# 答案抽取模式: "regex" 使用正则匹配, "llm" 使用LLM抽取
+EXTRACT_MODE="llm" #"regex"
+
 # OpenAI API 配置（用于 anyone_check 答案评判，与 EVAL_MODEL 独立配置）
-export OPENAI_API_KEY="your-openai-api-key"
-export OPENAI_BASE_URL="https://api.openai.com/v1"
+export OPENAI_API_KEY=""
+export OPENAI_BASE_URL="https://chatapi.littlewheat.com/v1"
 export OPENAI_MODEL="gpt-5.2"
 
 # --- 定义所有要运行的配置数组 ---
@@ -130,6 +133,7 @@ for config in "${CONFIGS[@]}"; do
     echo "  - Eval Model Temperature:  $EVAL_MODEL_TEMPERATURE"
     echo "  - Small Model Concurrency: $SMALL_MODEL_CONCURRENCY"
     echo "  - Eval Model Concurrency:  $EVAL_MODEL_CONCURRENCY"
+    echo "  - Extract Mode:            $EXTRACT_MODE"
     echo "  - Output Directory:        $OUTPUT_DIR"
     echo "  - Hyperparams Suffix:      $hyperparams_suffix"
     echo "===================================================================================="
@@ -201,6 +205,7 @@ for config in "${CONFIGS[@]}"; do
         --small_model_concurrency "$SMALL_MODEL_CONCURRENCY" \
         --eval_model_concurrency "$EVAL_MODEL_CONCURRENCY" \
         --max_retries "$MAX_RETRIES" \
+        --extract_mode "$EXTRACT_MODE" \
         --repeats "$SAMPLE_SIZE" > "$EVAL_SCRIPT_LOG" 2>&1 &
     EVAL_SCRIPT_PID=$!
     echo "Evaluation script started with PID: $EVAL_SCRIPT_PID"
