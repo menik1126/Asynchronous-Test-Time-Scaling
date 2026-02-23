@@ -134,6 +134,7 @@ for config in "${CONFIGS[@]}"; do
     echo "  - Turns:                   $EVAL_TURNS"
     echo "  - Small Model Temperature: $SMALL_MODEL_TEMPERATURE"
     echo "  - Eval Model Temperature:  $EVAL_MODEL_TEMPERATURE"
+    echo "  - Samples/Turn Increment:  $SAMPLES_PER_TURN_INCREMENT"
     echo "  - Small Model Concurrency: $SMALL_MODEL_CONCURRENCY"
     echo "  - Eval Model Concurrency:  $EVAL_MODEL_CONCURRENCY"
     echo "  - Eval Chat Template:      $USE_EVAL_CHAT_TEMPLATE"
