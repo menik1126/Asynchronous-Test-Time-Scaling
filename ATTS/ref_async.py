@@ -151,38 +151,61 @@ async def call_eval_model_ppl(prompt, idx, port):
 
     if use_chat_template:
         history_text = "\n\n".join([f"{h}" for h in prompt[1]])
-        messages = [
-            {"role": "system", "content": "You are a math expert."},
-            {"role": "user", "content": build_question(prompt[0])},
-            {"role": "assistant", "content": history_text},
-        ]
-        message = tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=False
+
+        # Replicate the server's /v1/chat/completions tokenization exactly:
+        #   template_ids = apply_chat_template([user], tokenize=True, add_generation_prompt=True)
+        #   assistant_ids = tokenizer.encode(assistant_prefix)
+        #   input_ids = template_ids + assistant_ids
+        template_ids = tokenizer.apply_chat_template(
+            [{"role": "user", "content": build_question(prompt[0])}],
+            tokenize=True,
+            add_generation_prompt=True,
         )
+        assistant_ids = tokenizer.encode(history_text)
+        input_ids = template_ids + assistant_ids
+
+        prefix_items = prompt[1][:-1]
+        if prefix_items:
+            prefix_text = "\n\n".join(prefix_items) + "\n\n"
+        else:
+            prefix_text = ""
+        prefix_ids = tokenizer.encode(prefix_text)
+        logprob_start_len = len(template_ids) + len(prefix_ids)
+
+        payload = {
+            "input_ids": input_ids,
+            "sampling_params": {
+                "temperature": 0,
+                "max_new_tokens": 1,
+            },
+            "return_logprob": True,
+            "logprob_start_len": logprob_start_len,
+            "top_logprobs_num": 1,
+        }
     else:
         message = build_eval_prompt_for_eval(prompt[0], prompt[1])
 
-    last_history_item = prompt[1][-1].strip("\n")
+        last_history_item = prompt[1][-1].strip("\n")
+        position = message.find(last_history_item)
+        if position == -1:
+            print(message)
+            print("---------------------------")
+            print(last_history_item)
+            raise ValueError("Prompt tokens not found in full tokens.")
 
-    position = message.find(last_history_item)
-    if position == -1:
-        print(message)
-        print("---------------------------")
-        print(last_history_item)
-        raise ValueError("Prompt tokens not found in full tokens.")
+        sub_message = message[:position]
+        logprob_start_len = len(tokenizer.tokenize(sub_message))
 
-    sub_message = message[:position]
-    logprob_start_len = len(tokenizer.tokenize(sub_message))
-    payload = {
-        "text": message,
-        "sampling_params": {
-            "temperature": 0,
-            "max_new_tokens": 1,
-        },
-        "return_logprob": True,
-        "logprob_start_len": logprob_start_len,
-        "top_logprobs_num": 1,
-    }
+        payload = {
+            "text": message,
+            "sampling_params": {
+                "temperature": 0,
+                "max_new_tokens": 1,
+            },
+            "return_logprob": True,
+            "logprob_start_len": logprob_start_len,
+            "top_logprobs_num": 1,
+        }
 
     global eval_model_semaphore
     async with eval_model_semaphore:
@@ -592,6 +615,7 @@ async def main():
                         sample_idx,
                         args.small_model_port,
                         args.eval_model_port,
+                        samples_per_turn_increment=args.samples_per_turn_increment,
                         args.output_dir,
                         args.small_model_temperature,
                         args.eval_model_temperature,
