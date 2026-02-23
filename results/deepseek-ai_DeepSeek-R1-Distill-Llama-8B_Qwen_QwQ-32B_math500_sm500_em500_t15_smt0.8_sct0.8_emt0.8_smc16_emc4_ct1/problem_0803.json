@@ -1,0 +1,117 @@
+{
+    "problem_index": 803,
+    "final_answer": "14",
+    "duration_seconds": 163.28143954277039,
+    "full_history": [
+        {
+            "turn": 0,
+            "model": "small",
+            "output": "Okay, so I have this polynomial \\( f(x) = a_nx^n + a_{n-1}x^{n-1} + \\cdots + a_2x^2 + a_1x + a_0 \\) with integer coefficients. The leading coefficient \\( a_n \\) is 2, and the constant term \\( a_0 \\) is 66. The roots of this polynomial are distinct integers. I need to find the least possible value of \\( |a_{n-1}| \\).\n\nHmm, let me recall that for a polynomial with integer coefficients, if it has integer roots, those roots must be divisors of the constant term \\( a_0 \\), right? So, since \\( a_0 = 66 \\), the possible integer roots are the divisors of 66. Let me list them out: \\( \\pm1, \\pm2, \\pm3, \\pm6, \\pm11, \\pm22, \\pm33, \\pm66 \\).\n\nNow, since the polynomial has distinct integer roots, I need to select a set of these divisors such that when I multiply them together and multiply by \\( (-1)^k \\cdot 2 \\), I get 66, where \\( k \\) is the number of roots. Wait, actually, the constant term \\( a_0 \\) is equal to \\( a_n \\times (-1)^n \\times \\) product of the roots. Since \\( a_n = 2 \\), that means \\( 66 = 2 \\times (-1)^n \\times r_1 r_2 \\cdots r_k \\). So, the product of the roots times \\( (-1)^n \\) should equal \\( 33 \\).\n\nSo, \\( r_1 r_2 \\cdots r_k = \\pm 33 \\) depending on the parity of \\( k \\) and the sign. But 33 factors into \\( 3 \\times 11 \\), so the roots must be combinations of 1, 3, 11, 33 and their negatives.\n\nSince we need distinct integer roots, let's try to find the minimal \\( |a_{n-1}| \\). I remember that \\( a_{n-1} \\) is related to the sum of the products of the roots taken \\( n-1 \\) at a time, multiplied by \\( (-1)^{n-1}"
+        },
+        {
+            "turn": 0,
+            "model": "eval_ppl",
+            "ppl": 1.6726588479886757,
+            "percentile": 0.621875
+        },
+        {
+            "turn": 0,
+            "model": "eval_generate",
+            "output": " \\times a_n \\). Wait, actually, the coefficients of the polynomial can be expressed via Vieta's formulas. Let me recall Vieta's formula for a monic polynomial. Since this polynomial is not monic, but has leading coefficient 2, I need to adjust accordingly.\n\nSuppose the polynomial is written as \\( 2(x - r_1)(x - r_2)\\cdots(x - r_n) \\). Then expanding this, the coefficient \\( a_{n-1} \\) would be \\( 2 \\times (-1)^{n-1} \\times (r_1 + r_2 + \\cdots + r_n) \\). Wait, let me confirm that.\n\nYes, for a monic polynomial \\( (x - r_1)(x - r_2)\\cdots(x - r_n) \\), the coefficient of \\( x^{n-1} \\) is \\( - (r_1 + r_2 + \\cdots + r_n) \\). So, if the polynomial is multiplied by 2, then the coefficient \\( a_{n-1} \\) would be \\( 2 \\times (-1)^{n-1} \\times (r_1 + r_2 + \\cdots + r_n) \\). Wait, actually, hold on. Let me think again.\n\nLet me consider the general case. Let the polynomial be \\( a_n \\prod_{i=1}^n (x - r_i) \\). Then expanding this, the coefficient of \\( x^{n-1} \\) is \\( a_n \\times (-1) \\times (r_1 + r_2 + \\cdots + r_n) \\). Because when you expand the product, the \\( x^{n-1} \\) term comes from choosing one of the \\( -r_i \\) terms and the rest \\( x \\). So the coefficient is \\( a_n \\times (- \\sum r_i) \\). Therefore, \\( a_{n-1} = -a_n \\times (r_1 + r_2 + \\cdots + r_n) \\).\n\nWait, so that's simpler. So, \\( a_{n-1} = -2 \\times (sum \\, of \\, roots) \\). Therefore, the absolute value \\( |a_{n-1}| = 2 \\times |sum \\, of \\,"
+        },
+        {
+            "turn": 1,
+            "model": "small",
+            "output": " roots| \\). So, to minimize \\( |a_{n-1}| \\), I need to minimize \\( |sum \\, of \\, roots| \\).\n\nSo, the task reduces to finding a set of distinct integer divisors of 66 (from the list I made earlier) such that their product is \\( \\pm 33 \\) (since \\( 66 = 2 \\times 33 \\)) and the sum of these roots is as close to zero as possible. Because \\( |sum| \\) being small will make \\( |a_{n-1}| \\) small.\n\nWait, but the product of the roots is \\( \\pm 33 \\), and each root is a divisor of 66, so the roots can be \\( \\pm1, \\pm3, \\pm11, \\pm33 \\).\n\nSince the roots must multiply to \\( \\pm33 \\), let's think about possible combinations of these numbers. We need distinct integers, so let me list the possible sets.\n\nFirst, note that 33 is positive, so the product can be positive or negative depending on the number of negative roots.\n\nSince 33 is positive, an even number of negative roots would give a positive product, and an odd number would give a negative product. So, depending on the desired product sign, but since 33 is positive, whether we take an even or odd number of negative roots.\n\nBut in any case, the product of the roots is going to be 33 or -33.\n\nSo, our job is to choose a set of distinct integer divisors of 66 whose product is 33 or -33, and the sum is as small as possible in absolute value.\n\nLet me consider that 33 factors as 3*11, or 1*3*11, etc.\n\nSo, perhaps using the smallest possible numbers in magnitude.\n\nLet me try starting with the smallest possible roots.\n\nCase 1: Only 1, 3, 11.\n\nBut 1*3*11 = 33. So, the sum is 1 + 3 + 11 = 15. So, |sum| is 15. Therefore, |a_{n-1}| would be 2*15=30.\n\nIs this the minimal?\n\nWait, maybe if we include negative roots.\n\nCase 2: Let me see if I can include negative numbers.\n\nSuppose I include -1, 3, 11.\n\nThen"
+        },
+        {
+            "turn": 1,
+            "model": "eval_ppl",
+            "ppl": 2.221078315072873,
+            "percentile": 0.960625
+        },
+        {
+            "turn": 1,
+            "model": "eval_generate",
+            "output": " the product is (-1)*3*11 = -33. So that's okay. The sum is (-1) + 3 + 11 = 13. So |sum| is 13, so |a_{n-1}| is 26. That's better.\n\nAlternatively, -3, 1, 11: product is (-3)*1*11 = -33. Sum is (-3)+1+11 = 9. So |sum| is 9, so |a_{n-1}| is 18. That's better.\n\nWait, even better.\n\nWait, let's see:\n\n-3, -1, 11: product is (-3)*(-1)*11 = 33. Sum is (-3) + (-1) + 11 = 7. So |sum| is 7, so |a_{n-1}| is 14. Hmm, that's better.\n\nWait, but are all roots distinct? Yes, -3, -1, 11 are distinct.\n\nAlternatively, -11, 3, 1: product is (-11)*3*1 = -33. Sum is (-11)+3+1 = -7, absolute value 7. So same as above.\n\nWait, so that gives a sum of -7, so absolute value 7. So that's better.\n\nWait, so that's 7. So |a_{n-1}| would be 14. Hmm, that's better.\n\nWait, but can we get even smaller?\n\nLet me see. Let's try with more roots. Since 33 can also be written as 1*3*11, but maybe adding more roots with 1 and -1?\n\nWait, but the product must be 33 or -33. Let me see.\n\nSuppose we have four roots. Let's see if that's possible.\n\nSuppose we have roots: -1, 1, 3, -11. Then the product is (-1)(1)(3)(-11) = 33. The sum is (-1) +1 +3 + (-11) = -8. The absolute value is 8, so |a_{n-1}| would be 16. Hmm, which is worse than 14"
+        },
+        {
+            "turn": 2,
+            "model": "small",
+            "output": ".\n\nAlternatively, -1,1, -3, 11: product is (-1)(1)(-3)(11)=33. Sum is (-1)+1+(-3)+11=8, |sum|=8, |a_{n-1}|=16.\n\nAlternatively, include -1, -1, 3,11. Wait, but roots have to be distinct. So can't use -1 twice.\n\nHmm.\n\nAlternatively, can I include 33? Let's see.\n\nSuppose I include 33. Then, if I include 33, how would it affect the product.\n\nWait, but 33 is already a factor, but in that case, the product would either be 33 or -33.\n\nSuppose I take, for example, 33 and another number. But then I have to include -1 or something.\n\nWait, let me think.\n\nIf I take 33 and -1, then 33*(-1) = -33, but that's only two roots. So, product is -33. Sum is 33 + (-1) = 32. So |sum|=32. That's worse.\n\nAlternatively, 33 and -3: product is 33*(-3)= -99, which is not 33. So that's not good.\n\nHmm.\n\nWait, another thought: Let me see if I can include 1, -1, 3, -11, as before, but then the product is 33, sum is -8, |a_{n-1}|=16. Maybe that's worse than the -7 sum.\n\nWait, but earlier, without including 1, I had -3, -1,11, which gives a smaller |sum|.\n\nAlternatively, try 3, -1, -11, 1: product is 3*(-1)*(-11)*1=33. Sum is 3 + (-1) + (-11)+1= -8, |sum|=8.\n\nNo, same as before.\n\nAlternatively, what if I include two negative numbers?\n\nWait, -3, -1, 11, sum is 7, as before. Product is (-3)*(-1)*11=33. That seems to be the smallest |sum| so far. Let me think if I can get a smaller |sum|.\n\nIs there a set of roots where the sum is smaller?\n\nLet me think of including 12: but"
+        },
+        {
+            "turn": 2,
+            "model": "eval_ppl",
+            "ppl": 2.587833386557455,
+            "percentile": 0.993125
+        },
+        {
+            "turn": 2,
+            "model": "eval_generate",
+            "output": " 12 is not a divisor of 66. Wait, divisors are only up to 66, but 12 isn't a divisor of 66. 66 divided by 12 is 5.5, so no.\n\nWait, let's see. Let me try with three roots. The minimal sum so far is 7 (from -3, -1, 11). Let me see if I can get a smaller sum with three roots.\n\nSuppose I have -11, 3, 1. The product is -11*3*1 = -33. The sum is -11 +3 +1 = -7, absolute value 7. So that's the same as the previous case.\n\nAlternatively, -3, 11, 1: product is -3*11*1 = -33. Sum is -3 +11 +1 =9. Not better.\n\nAlternatively, -3, -1, 11 gives sum 7, product 33.\n\nAlternatively, -1, -3, 11 gives sum 7, product 33.\n\nAlternatively, -1, 3, -11 gives product (-1)*3*(-11)=33, sum is -1+3-11 = -9, absolute value 9.\n\nHmm, so the minimal with three roots is 7.\n\nWhat if I use four roots?\n\nSuppose I have -1, 1, 3, -11. The product is (-1)(1)(3)(-11)=33. The sum is -1+1+3-11 = -8, absolute value 8. So that's worse than 7.\n\nAlternatively, -1, 1, -3, 11. Product is (-1)(1)(-3)(11)=33. Sum is -1+1-3+11=8, absolute value 8.\n\nAlternatively, -1, -1, 3, 11. But duplicates aren't allowed.\n\nHmm, maybe another combination. Let's see, if I have -3, -1, 1, 11. The product is (-3)(-1)(1)(11)=33. The sum is -3 -1 +1 +11 = 8. Still 8.\n\n"
+        },
+        {
+            "turn": 3,
+            "model": "small",
+            "output": "Alternatively, -11, 3, 1, -1. Product is (-11)(3)(1)(-1)=33. Sum is -11 +3 +1 -1 = -8. Absolute value 8.\n\nWait, in all these four-root cases, the minimal |sum| is 7 or 8. The three-root case gives 7. So, 7 is better.\n\nIs 7 the smallest possible? Let me think if I can get a sum of 0 or 1 or less.\n\nBut to get a product of 33 or -33, and with the roots being integer divisors of 66.\n\nWait, to get the sum to 0, we need positive and negative roots canceling each other.\n\nBut with 33 as the product, let's see. Suppose I have roots like 1, -1, 3, -11.\n\nWait, that's four roots, as above, product is 33, sum is (-1 +1 -11 +3) = -8.\n\nWait, not 0.\n\nAlternatively, is there a set of roots that sum to 0?\n\nLet me check.\n\nSuppose I take roots: 33, -33, 1, -1.\n\nProduct is 33*(-33)*1*(-1)= 33^2=1089, which is not 33. So that doesn't help.\n\nAlternatively, 11, -11, 3, -3. The product is 11*(-11)*3*(-3)= 1089, same issue.\n\nAlternatively, 11, -11, 1, -1: product is 11*(-11)*1*(-1)= 121, not 33.\n\nAlternatively, 11, -11, 1: product is -121, not helpful.\n\nAlternatively, let me think of a different set. Let's see, 3, -3, 11, -11. Again, product is 1089.\n\nHmm, not helpful.\n\nAlternatively, 3, -3, 11: product is -99, which is too large.\n\nAlternatively, 3, -3, 1: product is -9, not 33.\n\nHmm.\n\nWait, perhaps with two negative numbers.\n\nLet me think of a set where positive and negative numbers add up to 0.\n\nBut with three roots:\n\nSuppose we have two positive and one negative root, such that their sum is 0.\n\n"
+        },
+        {
+            "turn": 3,
+            "model": "eval_ppl",
+            "ppl": 2.230289002194652,
+            "percentile": 0.9625
+        },
+        {
+            "turn": 3,
+            "model": "eval_generate",
+            "output": "Wait, for example, 11, 3, and -14. But -14 is not a divisor of 66. 66 divided by 14 is not integer. So that's not allowed.\n\nAlternatively, 11, 1, and -12. Again, -12 is not a divisor.\n\nHmm, so maybe it's impossible to get a sum of zero with roots that multiply to 33 or -33.\n\nAlternatively, maybe with four roots?\n\nSuppose I have roots: 11, 3, -1, -13. But -13 is not a divisor of 66.\n\nHmm, not helpful.\n\nAlternatively, 11, 3, -1, -1. But duplicates aren't allowed.\n\nHmm, perhaps it's impossible. So the minimal |sum| is 7?\n\nWait, but let me check another combination.\n\nWait, what if I take roots: -3, -1, 1, 11. The product is (-3)(-1)(1)(11)=33. The sum is (-3) + (-1) +1 +11 = 8. Not better.\n\nAlternatively, -3, -1, 3, 11. But 3 is already in there. Wait, but product would be (-3)(-1)(3)(11)= 99, which is too big.\n\nHmm.\n\nWait, let me think of another approach. Let me list all possible combinations of distinct divisors of 66 (excluding 0) whose product is ±33, and compute their sums.\n\nFirst, note that 33 factors into primes as 3×11. So the divisors involved must be factors of 33, but since 66 is 2×3×11, the divisors can also include 2, but 2 is a factor of 66 but not of 33. Wait, but the product of the roots must be ±33, so if we include 2 as a root, then the product would have a factor of 2, which would make the product 2×something, but 33 is not divisible by 2. Therefore, 2 cannot be one of the roots. Similarly, 6, 22, 33, etc. Wait, but 33 is"
+        },
+        {
+            "turn": 4,
+            "model": "small",
+            "output": " a root, 33 is a divisor of 66, but 33 includes a factor of 11 and 3.\n\nWait, but if we include 2 as a root, then the product would have a factor of 2, which is not allowed because the product must be 33 or -33. So, 2 cannot be one of the roots. Therefore, possible roots are only among the odd divisors of 66, which are 1,3,11,33 and their negatives.\n\nTherefore, possible roots: ±1, ±3, ±11, ±33.\n\nThus, I can only use these numbers as roots.\n\nSo, let's list all possible combinations of these numbers with distinct elements, whose product is 33 or -33.\n\nCase 1: Single root.\n\nBut 33 isn't a root because if the polynomial is of degree higher than 1, but even if it were, the product would be 33, but the sum is just 33 or -33, so |sum| would be 33, which is larger than 7.\n\nCase 2: Two roots.\n\nPossible pairs:\n\n11 and 3: 11×3=33. Sum is 14.\n\n-11 and -3: (-11)×(-3)=33. Sum is -14.\n\nSimilarly, -11 and 3: product is -33, sum is -8.\n\n11 and -3: product is -33, sum is 8.\n\nSo the minimal |sum| in two roots is 8.\n\nCase 3: Three roots.\n\nWe need three distinct roots among ±1, ±3, ±11, ±33, with product 33 or -33.\n\nSo, let's see:\n\nPossibility 1: 1,3,11: product=33, sum=15.\n\nPossibility 2: (-1),3,11: product=-33, sum=13.\n\nPossibility 3: 1,(-3),11: product=-33, sum=9.\n\nPossibility 4: (-1),(-3),11: product=33, sum=7.\n\nPossibility 5: (-1),3,(-11): product=33, sum=-9.\n\nPossibility 6: 1,(-3),(-11): product=99, which is too big.\n\nWait, no: 1×(-3)×(-11)=33, right? Because 1"
+        },
+        {
+            "turn": 4,
+            "model": "eval_ppl",
+            "ppl": 1.7846463749399653,
+            "percentile": 0.77375
+        },
+        {
+            "turn": 4,
+            "model": "eval_generate",
+            "output": "×3×11=33, so with two negatives, it's still 33. So product is 33, sum is 1 -3 -11 = -13.\n\nWait, so that's another possibility: 1, -3, -11. Product is 33, sum is -13.\n\nSimilarly, -1, -3, -11: product is -33, sum is -15.\n\nWait, but let's see:\n\nWait, let me list all possible three-element combinations:\n\n1. 1, 3, 11 → product 33, sum 15\n\n2. 1, 3, -11 → product -33, sum (1+3-11)= -7\n\n3. 1, -3, 11 → product -33, sum (1-3+11)=9\n\n4. 1, -3, -11 → product 33, sum (1-3-11)= -13\n\n5. -1, 3, 11 → product -33, sum (-1+3+11)=13\n\n6. -1, 3, -11 → product 33, sum (-1+3-11)= -9\n\n7. -1, -3, 11 → product 33, sum (-1-3+11)=7\n\n8. -1, -3, -11 → product -33, sum (-1-3-11)= -15\n\n9. 1, 11, -3 → same as 2.\n\nWait, so the minimal |sum| here is 7 (from case 7) and -7 (case 2). So |sum|=7.\n\nSo that's the minimal for three roots.\n\nCase 4: Four roots.\n\nWe need four distinct roots from ±1, ±3, ±11, ±33, with product ±33.\n\nPossible combinations:\n\nLet me see. Since the product is 33 or -33, and we have four roots, so the product of four numbers must be 33 or -33. Since 33 is 3×11, so to get four numbers multiplying to 33 or -33, we need to"
+        },
+        {
+            "turn": 5,
+            "model": "small",
+            "output": " have factors 1, -1, 3, -11; or similar.\n\nLet me try:\n\nPossibility 1: 1, -1, 3, -11. Product is (1)(-1)(3)(-11)=33. Sum is (1-1+3-11)= -8.\n\nPossibility 2: -1, 1, -3, 11. Product is (-1)(1)(-3)(11)=33. Sum is (-1+1-3+11)=8.\n\nPossibility 3: -1, 1, 3, -11. Same as case 1.\n\nWait, another possibility: 1, -1, -3, 11. Product is (1)(-1)(-3)(11)=33. Sum is (1-1-3+11)=8.\n\nAlternatively, 1, -1, 3, -11: sum is -8.\n\nIs there a combination where the sum is smaller?\n\nWait, maybe including 33.\n\nBut including 33 or -33 may complicate.\n\nSuppose I include 33:\n\nPossibility: 33, -1, 1, something.\n\nBut 33*(-1)*1*s= needs to have s such that the product is 33 or -33.\n\nWait, 33*(-1)*1*s= -33*s. To get 33, s must be -1. But then 33, -1, 1, -1. But duplicates aren't allowed.\n\nSimilarly, if I include 33 and -33: 33*(-33)= -1089. That's too big.\n\nAlternatively, 33, -3, 1, something: 33*(-3)*1*s= -99*s. To get 33, s= -1/3. Not integer.\n\nNot helpful.\n\nAlternatively, 11, -11, 3, -3: product is (11)(-11)(3)(-3)= 1089, which is too big.\n\nAlternatively, 11, -11, 1, -1: product is 121, same.\n\nSo, seems that including 33 or 11, -11 would make the product too big.\n\nTherefore, four roots with minimal |sum| is 8.\n\nSo, summarizing:\n\n- For three roots, minimal |sum|=7.\n\n- For two roots, minimal |sum|=8"
+        },
+        {
+            "turn": 5,
+            "model": "eval_ppl",
+            "ppl": 1.8359334534461673,
+            "percentile": 0.8175
+        },
+        {
+            "turn": 5,
+            "model": "eval_generate",
+            "output": ".\n\n- For four roots, minimal |sum|=8.\n\n- For one root, |sum|=33.\n\nTherefore, the minimal |sum| is 7, achieved by three roots: -1, -3, 11 (sum 7) or 1, -3, -11 (sum -7). Either way, the absolute value is 7.\n\nTherefore, the minimal |a_{n-1}| is 2×7=14.\n\nWait, but hold on. Let me check if there are other combinations with more roots that can give a smaller sum.\n\nWait, five roots? Let's see.\n\nTo have five roots, their product must be ±33. Since 33 is 3×11, so with five roots, we need to include 1 and -1 as well.\n\nFor example, roots: 1, -1, 3, -3, 11. The product is (1)(-1)(3)(-3)(11)= 99. Not 33.\n\nHmm, too big.\n\nAlternatively, 1, -1, 3, 11, -1. But duplicates.\n\nAlternatively, 1, -1, 3, 11, -3. Product is (1)(-1)(3)(11)(-3)= 99. Still too big.\n\nAlternatively, 1, -1, 3, -11, 1. Duplicates again.\n\nHmm, not helpful.\n\nAlternatively, 1, -1, 3, -11, -1. Duplicates again.\n\nAlternatively, 1, -1, 3, -11, 11. Product is (1)(-1)(3)(-11)(11)= 363. Not 33.\n\nHmm, so five roots would require more factors, making the product too big. So probably not possible.\n\nSimilarly, six roots would need even more factors, so product would be even larger. So, no.\n\nTherefore, the minimal |sum| is indeed 7, so the minimal |a_{n-1}| is 14.\n\nWait, but let me check another possibility with three roots. Let me see if there's another combination.\n\nWait, what about -1, -3, 11: product is (-1)(-3)(11)=33,"
+        },
+        {
+            "turn": 6,
+            "model": "small",
+            "output": " sum is (-1)+(-3)+11=7.\n\nAlternatively, -33,1, -1: product is (-33)(1)(-1)=33, sum is (-33)+1+(-1)= -33, which is worse.\n\nAlternatively, 33, -1, -1: duplicates.\n\nNo, so I think 7 is indeed the minimal.\n\nTherefore, the minimal |a_{n-1}| is 14.\n\n**Final Answer**\nThe least possible value of \\( |a_{n-1}| \\) is \\boxed{14}.\n</think>\n\nGiven the polynomial \\( f(x) = a_nx^n + a_{n-1}x^{n-1} + \\cdots + a_2x^2 + a_1x + a_0 \\) with integer coefficients, where \\( a_n = 2 \\) and \\( a_0 = 66 \\), we need to find the least possible value of \\( |a_{n-1}| \\). The roots of this polynomial are distinct integers.\n\nFirst, we note that the constant term \\( a_0 = 66 \\) implies that the possible integer roots are the divisors of 66: \\( \\pm1, \\pm2, \\pm3, \\pm6, \\pm11, \\pm22, \\pm33, \\pm66 \\).\n\nUsing Vieta's formulas, the coefficient \\( a_{n-1} \\) is related to the sum of the roots. Specifically, \\( a_{n-1} = -2 \\times (\\text{sum of the roots}) \\). Therefore, to minimize \\( |a_{n-1}| \\), we need to minimize the absolute value of the sum of the roots.\n\nWe consider the product of the roots, which must be \\( \\pm33 \\) (since \\( 66 = 2 \\times 33 \\)). The factors of 33 are 1, 3, 11, and 33, as well as their negatives. We need to find distinct sets of these factors whose product is \\( \\pm33 \\) and whose sum is minimized.\n\nAfter evaluating various combinations, we find that the set of roots \\(-1, -3, 11\\) or \\(-1, 1, -11\\) gives a product of 33 or -33 and a sum of -7 or 7, respectively. The absolute value of this sum is"
+        },
+        {
+            "turn": 6,
+            "model": "eval_ppl",
+            "ppl": 1.3437285099928706,
+            "percentile": 0.0525
+        }
+    ],
+    "question": "Suppose the polynomial\n$$f(x) = a_nx^n + a_{n-1}x^{n-1} + \\cdots + a_2x^2 + a_1x + a_0$$has integer coefficients, and its roots are distinct integers.\n\nGiven that $a_n=2$ and $a_0=66$, what is the least possible value of $|a_{n-1}|$?",
+    "final_answer_regex": "14",
+    "final_answer_llm": "14"
+}
