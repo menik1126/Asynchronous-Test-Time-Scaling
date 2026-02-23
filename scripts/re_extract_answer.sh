@@ -3,7 +3,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-export OPENAI_API_KEY=""
+export OPENAI_API_KEY="sk-f7Oh115pfz6REQeFKesLFOhrk85Yd8ySvnqmRDZ08oDT8nyr"
 export OPENAI_BASE_URL="https://chatapi.littlewheat.com/v1"
 export OPENAI_MODEL="gpt-5.2"
 
