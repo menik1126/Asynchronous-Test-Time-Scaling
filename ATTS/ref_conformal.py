@@ -141,8 +141,11 @@ async def call_eval_model_ppl(prompt, eval_model_port):
     try:
         input_token_logprobs = response.json()["meta_info"]["input_token_logprobs"][1:]
         logprobs = [entry[0] for entry in input_token_logprobs if entry[0] is not None]
-        avg_neg_logprob = -sum(logprobs) / len(logprobs)
-        ppl = math.exp(avg_neg_logprob)
+        if not logprobs:
+            ppl = float("inf")
+        else:
+            avg_neg_logprob = -sum(logprobs) / len(logprobs)
+            ppl = math.exp(avg_neg_logprob)
     except (KeyError, IndexError, ValueError) as e:
         print(f"Error parsing response from eval model: {e}")
         ppl = float("inf")

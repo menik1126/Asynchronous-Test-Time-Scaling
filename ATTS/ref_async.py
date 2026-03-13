@@ -615,7 +615,6 @@ async def main():
                         sample_idx,
                         args.small_model_port,
                         args.eval_model_port,
-                        samples_per_turn_increment=args.samples_per_turn_increment,
                         args.output_dir,
                         args.small_model_temperature,
                         args.eval_model_temperature,
