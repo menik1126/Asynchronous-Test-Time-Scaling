@@ -1333,6 +1333,7 @@ class Scheduler:
                                     budget=budget,
                                     recent_window=self.server_args.kv_compress_recent_window,
                                     obs_window=obs_window,
+                                    protect_prefix=self.server_args.kv_compress_protect_prefix,
                                 )
                                 # Compact selected KV indices into req_to_token
                                 # (no freeing — slots are shared with tree)

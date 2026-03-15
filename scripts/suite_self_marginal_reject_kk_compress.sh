@@ -34,6 +34,7 @@ KV_COMPRESS_RATIO=0.5
 KV_COMPRESS_RECENT=64
 KV_COMPRESS_OBS=32
 KV_COMPRESS_MIN_SEQ=512
+KV_COMPRESS_PROTECT_PREFIX=128
 
 export OPENAI_API_KEY="sk-f7Oh115pfz6REQeFKesLFOhrk85Yd8ySvnqmRDZ08oDT8nyr"
 export OPENAI_BASE_URL="https://chatapi.littlewheat.com/v1"
@@ -98,6 +99,7 @@ env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_
     --kv-compress-ratio "$KV_COMPRESS_RATIO" \
     --kv-compress-recent-window "$KV_COMPRESS_RECENT" \
     --kv-compress-obs-window "$KV_COMPRESS_OBS" \
+    --kv-compress-protect-prefix "$KV_COMPRESS_PROTECT_PREFIX" \
     --kv-compress-min-seq-len "$KV_COMPRESS_MIN_SEQ" \
     --disable-cuda-graph > "$OUTPUT_DIR/server.log" 2>&1 &
 MODEL_PID=$!

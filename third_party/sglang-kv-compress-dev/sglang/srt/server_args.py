@@ -140,6 +140,7 @@ class ServerArgs:
     kv_compress_ratio: float = 0.0
     kv_compress_recent_window: int = 64
     kv_compress_obs_window: int = 32
+    kv_compress_protect_prefix: int = 128
     kv_compress_min_seq_len: int = 512
 
     # Double Sparsity
@@ -830,6 +831,12 @@ class ServerArgs:
             type=int,
             default=ServerArgs.kv_compress_obs_window,
             help="Observation window size for attention scoring",
+        )
+        parser.add_argument(
+            "--kv-compress-protect-prefix",
+            type=int,
+            default=ServerArgs.kv_compress_protect_prefix,
+            help="Number of tokens at sequence start to always keep (protects question/prompt tokens)",
         )
         parser.add_argument(
             "--kv-compress-min-seq-len",

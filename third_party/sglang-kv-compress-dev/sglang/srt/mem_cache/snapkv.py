@@ -109,6 +109,7 @@ def snapkv_select_positions(
     recent_window: int = 64,
     obs_window: int = 32,
     kernel_size: int = 5,
+    protect_prefix: int = 0,
 ) -> torch.Tensor:
     """Select important token positions using SnapKV attention pooling.
 
@@ -120,11 +121,13 @@ def snapkv_select_positions(
         recent_window: Number of recent tokens to always keep.
         obs_window: Size of the observation window (last N tokens before recent).
         kernel_size: Pooling kernel size for smoothing attention scores.
+        protect_prefix: Number of tokens at the start to always keep (e.g., question tokens).
+            These are excluded from the selection budget — they are kept unconditionally.
 
     Returns:
         Sorted tensor of selected position indices (on the same device as attn_weights).
     """
-    if seq_len <= budget + recent_window + obs_window:
+    if seq_len <= budget + recent_window + obs_window + protect_prefix:
         return torch.arange(seq_len, device=attn_weights.device)
 
     if attn_weights.dim() == 2:
@@ -132,31 +135,36 @@ def snapkv_select_positions(
 
     prefix_len = seq_len - obs_window - recent_window
 
-    if prefix_len <= budget:
+    if prefix_len <= budget + protect_prefix:
         return torch.arange(seq_len, device=attn_weights.device)
 
-    prefix_attn = attn_weights[:, :, :prefix_len]
+    # Protected prefix: always kept, not part of the selection pool
+    protected = torch.arange(protect_prefix, device=attn_weights.device)
 
-    # Average across heads, then pool along observation window to smooth
-    avg_attn = prefix_attn.mean(dim=0)  # [obs_window, prefix_len]
-    scores = avg_attn.sum(dim=0)  # [prefix_len]
+    # Only score the compressible region (after protected prefix, before obs+recent)
+    compress_attn = attn_weights[:, :, protect_prefix:prefix_len]
 
-    if kernel_size > 1 and prefix_len >= kernel_size:
-        scores_1d = scores.unsqueeze(0).unsqueeze(0)  # [1, 1, prefix_len]
+    avg_attn = compress_attn.mean(dim=0)  # [obs_window, compressible_len]
+    scores = avg_attn.sum(dim=0)  # [compressible_len]
+
+    compressible_len = prefix_len - protect_prefix
+    if kernel_size > 1 and compressible_len >= kernel_size:
+        scores_1d = scores.unsqueeze(0).unsqueeze(0)
         scores_pooled = F.avg_pool1d(
             scores_1d,
             kernel_size=kernel_size,
             padding=kernel_size // 2,
             stride=1,
         ).squeeze(0).squeeze(0)
-        scores = scores_pooled[:prefix_len]
+        scores = scores_pooled[:compressible_len]
 
-    _, topk_idx = scores.topk(budget)
-    important = topk_idx.sort().values
+    actual_budget = min(budget, compressible_len)
+    _, topk_idx = scores.topk(actual_budget)
+    important = (topk_idx + protect_prefix).sort().values  # offset back to global positions
 
     obs = torch.arange(prefix_len, prefix_len + obs_window, device=attn_weights.device)
     recent = torch.arange(seq_len - recent_window, seq_len, device=attn_weights.device)
-    selected = torch.cat([important, obs, recent]).unique().sort().values
+    selected = torch.cat([protected, important, obs, recent]).unique().sort().values
 
     return selected
 
