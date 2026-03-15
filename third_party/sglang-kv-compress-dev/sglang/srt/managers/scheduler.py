@@ -1328,12 +1328,18 @@ class Scheduler:
                                 req, self.req_to_token_pool, kvcache, obs_window=obs_window,
                             )
                             if attn_weights is not None:
+                                # Dynamic protect_prefix: use question length from chat API if available
+                                protect_len = self.server_args.kv_compress_protect_prefix
+                                custom = getattr(req.sampling_params, 'custom_params', None)
+                                if isinstance(custom, dict) and 'snapkv_protect_len' in custom:
+                                    protect_len = custom['snapkv_protect_len']
+
                                 selected = snapkv_select_positions(
                                     attn_weights, seq_len,
                                     budget=budget,
                                     recent_window=self.server_args.kv_compress_recent_window,
                                     obs_window=obs_window,
-                                    protect_prefix=self.server_args.kv_compress_protect_prefix,
+                                    protect_prefix=protect_len,
                                 )
                                 # Compact selected KV indices into req_to_token
                                 # (no freeing — slots are shared with tree)
@@ -1354,7 +1360,7 @@ class Scheduler:
                                 logger.info(
                                     f"SnapKV attention-compress req {req.rid}: "
                                     f"{seq_len} -> {compressed_len} tokens "
-                                    f"(budget={budget}, ratio={compressed_len/seq_len:.1%}, tree cached)"
+                                    f"(budget={budget}, protect={protect_len}, ratio={compressed_len/seq_len:.1%}, tree cached)"
                                 )
                         except Exception as e:
                             import traceback as tb
