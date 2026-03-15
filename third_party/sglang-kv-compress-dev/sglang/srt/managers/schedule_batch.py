@@ -1142,18 +1142,22 @@ class ScheduleBatch:
         # effective_seq_len = compressed_seq_len + decode_steps_since_compress
         if self.seq_lens is not None:
             for idx, req in enumerate(self.reqs):
-                if getattr(req, "is_kv_compressed", False):
-                    decode_steps = len(req.output_ids) - 1
-                    expected_sl = req.compressed_seq_len + decode_steps
+                if (
+                    getattr(req, "is_kv_compressed", False)
+                    and not getattr(req, "_snapkv_seq_lens_fixed", False)
+                ):
+                    # One-time fix: correct seq_lens from original to compressed length.
+                    # After this, seq_lens increments normally via add_(1) each decode step.
                     current_sl = self.seq_lens[idx].item()
-                    if current_sl != expected_sl:
+                    new_sl = req.compressed_seq_len
+                    if current_sl != new_sl:
                         logger.info(
-                            f"SnapKV decode seq_lens: req {req.rid} "
-                            f"{current_sl} -> {expected_sl} "
-                            f"(compressed={req.compressed_seq_len}, decode_steps={decode_steps})"
+                            f"SnapKV decode seq_lens fix: req {req.rid} "
+                            f"{current_sl} -> {new_sl}"
                         )
-                        self.seq_lens_sum += (expected_sl - current_sl)
-                        self.seq_lens[idx] = expected_sl
+                        self.seq_lens_sum += (new_sl - current_sl)
+                        self.seq_lens[idx] = new_sl
+                    req._snapkv_seq_lens_fixed = True
 
         # Alloc mem
         bs = len(self.reqs)
