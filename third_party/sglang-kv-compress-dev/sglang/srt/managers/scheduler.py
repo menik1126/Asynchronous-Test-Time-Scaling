@@ -1303,13 +1303,11 @@ class Scheduler:
                     # SnapKV attention-only compression: shorten the attention window
                     # without freeing slots (tree still owns them for prefix sharing).
                     # This reduces decode compute while preserving radix cache hit rate.
-                    # Skip for short-decode requests (e.g., PPL with max_new_tokens=1).
                     if (
                         not req.finished()
                         and self.server_args.enable_kv_compress
                         and not getattr(req, "is_kv_compressed", False)
                         and req.seqlen >= self.server_args.kv_compress_min_seq_len
-                        and req.sampling_params.max_new_tokens > 16
                     ):
                         from sglang.srt.mem_cache.snapkv import (
                             compute_obs_attn_scores,
@@ -1326,11 +1324,8 @@ class Scheduler:
                                 adaptive_budget = int(seq_len * self.server_args.kv_compress_ratio)
                                 budget = max(budget, adaptive_budget)
 
-                            # Use cached Q vectors from prefill if available
-                            cached_q = getattr(batch, 'snapkv_q_cache', None)
                             attn_weights = compute_obs_attn_scores(
                                 req, self.req_to_token_pool, kvcache, obs_window=obs_window,
-                                cached_q=cached_q, req_index=i,
                             )
                             if attn_weights is not None:
                                 selected = snapkv_select_positions(
