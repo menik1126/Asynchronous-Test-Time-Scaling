@@ -137,6 +137,7 @@ class ServerArgs:
     # SnapKV KV Cache Compression
     enable_kv_compress: bool = False
     kv_compress_budget: int = 256
+    kv_compress_ratio: float = 0.0
     kv_compress_recent_window: int = 64
     kv_compress_obs_window: int = 32
     kv_compress_min_seq_len: int = 512
@@ -809,7 +810,14 @@ class ServerArgs:
             "--kv-compress-budget",
             type=int,
             default=ServerArgs.kv_compress_budget,
-            help="Number of important tokens to keep from the prefix region",
+            help="Min number of important tokens to keep from the prefix region",
+        )
+        parser.add_argument(
+            "--kv-compress-ratio",
+            type=float,
+            default=ServerArgs.kv_compress_ratio,
+            help="Adaptive keep ratio (0.0-1.0). If >0, budget = max(budget, seq_len * ratio). "
+                 "E.g., 0.5 keeps at least 50%% of tokens. 0.0 disables adaptive scaling.",
         )
         parser.add_argument(
             "--kv-compress-recent-window",

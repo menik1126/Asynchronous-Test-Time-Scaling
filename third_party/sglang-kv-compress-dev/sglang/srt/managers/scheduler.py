@@ -1293,17 +1293,21 @@ class Scheduler:
 
                     if req.finished():
                         self.tree_cache.cache_finished_req(req)
-                    elif (
-                        self.server_args.enable_kv_compress
+                    elif not batch.decoding_reqs or req not in batch.decoding_reqs:
+                        # Write back to tree first (preserves prefix cache for future turns)
+                        self.tree_cache.cache_unfinished_req(req)
+
+                    # SnapKV attention-only compression: shorten the attention window
+                    # without freeing slots (tree still owns them for prefix sharing).
+                    # This reduces decode compute while preserving radix cache hit rate.
+                    if (
+                        not req.finished()
+                        and self.server_args.enable_kv_compress
                         and not getattr(req, "is_kv_compressed", False)
                         and req.seqlen >= self.server_args.kv_compress_min_seq_len
                     ):
-                        # SnapKV: compress BEFORE cache_unfinished_req.
-                        # Compressed KV is sparse → skip tree insertion (can't be prefix-shared).
-                        # Must update seq_lens so decode writes new tokens at the right position.
                         from sglang.srt.mem_cache.snapkv import (
                             compute_obs_attn_scores,
-                            compress_request_kv,
                             snapkv_select_positions,
                         )
 
@@ -1311,51 +1315,49 @@ class Scheduler:
                             obs_window = self.server_args.kv_compress_obs_window
                             kvcache = self.token_to_kv_pool_allocator.get_kvcache()
                             seq_len = req.seqlen
+
+                            budget = self.server_args.kv_compress_budget
+                            if self.server_args.kv_compress_ratio > 0:
+                                adaptive_budget = int(seq_len * self.server_args.kv_compress_ratio)
+                                budget = max(budget, adaptive_budget)
+
                             attn_weights = compute_obs_attn_scores(
                                 req, self.req_to_token_pool, kvcache, obs_window=obs_window,
                             )
                             if attn_weights is not None:
                                 selected = snapkv_select_positions(
                                     attn_weights, seq_len,
-                                    budget=self.server_args.kv_compress_budget,
+                                    budget=budget,
                                     recent_window=self.server_args.kv_compress_recent_window,
                                     obs_window=obs_window,
                                 )
-                                prefix_len = len(req.prefix_indices) if req.prefix_indices is not None else 0
-                                freed = compress_request_kv(
-                                    req, self.token_to_kv_pool_allocator,
-                                    self.req_to_token_pool, selected, prefix_len,
+                                # Compact selected KV indices into req_to_token
+                                # (no freeing — slots are shared with tree)
+                                full_kv = self.req_to_token_pool.req_to_token[
+                                    req.req_pool_idx, :seq_len
+                                ]
+                                selected_kv = full_kv[selected.to(full_kv.device)]
+                                compressed_len = len(selected_kv)
+                                self.req_to_token_pool.req_to_token[
+                                    req.req_pool_idx, :compressed_len
+                                ] = selected_kv
+
+                                req.is_kv_compressed = True
+                                req.compressed_seq_len = compressed_len
+                                req.original_seq_len = seq_len
+                                req.selected_positions = selected.cpu()
+
+                                logger.info(
+                                    f"SnapKV attention-compress req {req.rid}: "
+                                    f"{seq_len} -> {compressed_len} tokens "
+                                    f"(budget={budget}, ratio={compressed_len/seq_len:.1%}, tree cached)"
                                 )
-                                if freed > 0:
-                                    new_sl = req.compressed_seq_len
-                                    if batch.seq_lens is not None:
-                                        batch.seq_lens[i] = new_sl
-                                        batch.seq_lens_sum = batch.seq_lens.sum().item()
-                                    if req.last_node is not None:
-                                        self.tree_cache.dec_lock_ref(req.last_node)
-                                        req.last_node = self.tree_cache.root_node
-                                        self.tree_cache.inc_lock_ref(req.last_node)
-                                    logger.info(
-                                        f"SnapKV compressed req {req.rid}: "
-                                        f"{seq_len} -> {new_sl} tokens, freed {freed} slots"
-                                    )
-                                else:
-                                    if not batch.decoding_reqs or req not in batch.decoding_reqs:
-                                        self.tree_cache.cache_unfinished_req(req)
-                            else:
-                                if not batch.decoding_reqs or req not in batch.decoding_reqs:
-                                    self.tree_cache.cache_unfinished_req(req)
                         except Exception as e:
                             import traceback as tb
                             logger.warning(
                                 f"SnapKV compression failed for req {req.rid}: {e}\n"
                                 f"{tb.format_exc()}"
                             )
-                            if not batch.decoding_reqs or req not in batch.decoding_reqs:
-                                self.tree_cache.cache_unfinished_req(req)
-                    elif not batch.decoding_reqs or req not in batch.decoding_reqs:
-                        # This updates radix so others can match
-                        self.tree_cache.cache_unfinished_req(req)
 
                     if req.return_logprob:
                         assert extend_logprob_start_len_per_req is not None

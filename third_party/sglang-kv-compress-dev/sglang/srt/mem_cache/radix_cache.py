@@ -143,12 +143,17 @@ class RadixCache(BasePrefixCache):
             return
 
         if getattr(req, "is_kv_compressed", False):
-            # Compressed requests: free remaining KV slots, don't insert into radix tree.
-            # The compressed KV is sparse and cannot be reused via prefix matching.
-            kv_indices = self.req_to_token_pool.req_to_token[
-                req.req_pool_idx, : req.compressed_seq_len
-            ]
-            self.token_to_kv_pool_allocator.free(kv_indices)
+            # Attention-only compression: tree already has the full KV cached
+            # (written by cache_unfinished_req before compression).
+            # Just free the req slot and decode-phase KV slots (those after compressed_seq_len).
+            # The compressed slots are shared with the tree — don't free them.
+            decode_start = req.compressed_seq_len
+            decode_end = decode_start + len(req.output_ids) - 1  # -1: first output was in prefill
+            if decode_end > decode_start:
+                decode_kv = self.req_to_token_pool.req_to_token[
+                    req.req_pool_idx, decode_start:decode_end
+                ]
+                self.token_to_kv_pool_allocator.free(decode_kv)
             self.req_to_token_pool.free(req.req_pool_idx)
             if req.last_node is not None:
                 self.dec_lock_ref(req.last_node)
