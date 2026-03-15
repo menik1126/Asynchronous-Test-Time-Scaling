@@ -65,9 +65,9 @@ MAX_RETRIES=3
 EXTRACT_MODE="regex" #"regex"
 
 # OpenAI API 配置（用于 anyone_check 答案评判，与 EVAL_MODEL 独立配置）
-export OPENAI_API_KEY=""
+export OPENAI_API_KEY="sk-f7Oh115pfz6REQeFKesLFOhrk85Yd8ySvnqmRDZ08oDT8nyr"
 export OPENAI_BASE_URL="https://chatapi.littlewheat.com/v1"
-export OPENAI_MODEL="gpt-5.2"
+export OPENAI_MODEL="gpt-4o"
 
 # --- 定义所有要运行的配置数组 ---
 # PPL文件名格式: ppls_{dataset}_{eval_model}_{small_model}_s{SAMPLE_SIZE}_t{SMALL_MODEL_MAX_TOKENS}_temp{SMALL_MODEL_TEMPERATURE}.npy
@@ -198,7 +198,7 @@ for config in "${CONFIGS[@]}"; do
     fi
 
     echo "Starting evaluation script in the background, output will be logged to $EVAL_SCRIPT_LOG..."
-    env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_PROXY \
+    no_proxy="localhost,127.0.0.1,0.0.0.0" NO_PROXY="localhost,127.0.0.1,0.0.0.0" \
         python3 -m ATTS.ref_async \
         --small_model_name "$SMALL_MODEL" \
         --eval_model_name "$EVAL_MODEL" \

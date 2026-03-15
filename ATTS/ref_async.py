@@ -222,11 +222,34 @@ async def call_eval_model_ppl(prompt, idx, port):
         return math.exp(avg_neg_logprob)
 
 
+def _extract_boxed_balanced(text):
+    """Extract content from \\boxed{...} with balanced brace matching."""
+    results = []
+    pattern = "\\boxed{"
+    i = 0
+    while i < len(text):
+        pos = text.find(pattern, i)
+        if pos == -1:
+            break
+        start = pos + len(pattern)
+        depth = 1
+        j = start
+        while j < len(text) and depth > 0:
+            if text[j] == "{":
+                depth += 1
+            elif text[j] == "}":
+                depth -= 1
+            j += 1
+        if depth == 0:
+            results.append(text[start : j - 1])
+        i = j
+    return results
+
+
 async def extract_answer_regex(history):
     answer = "invalid"
     temp = "\n\n".join([f"{history[i]}" for i in range(len(history))])
-
-    matches = re.findall(r"\\boxed\{(.*?)\}", temp)
+    matches = _extract_boxed_balanced(temp)
     if matches:
         answer = matches[-1]
     else:
@@ -234,7 +257,6 @@ async def extract_answer_regex(history):
         matches = pattern.findall(temp)
         if matches:
             answer = matches[-1]
-
     return answer
 
 

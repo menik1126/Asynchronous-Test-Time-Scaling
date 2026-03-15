@@ -2,6 +2,10 @@
 
 The same model acts as both the draft generator and the PPL evaluator.
 Only one SGLang server is needed.
+
+PPL is computed via a separate prefill-only forward pass using the /generate endpoint.
+The generation and PPL calls share the same prompt prefix, leveraging SGLang's prefix
+caching so the PPL evaluation reuses cached KV states and is nearly free.
 """
 import argparse
 import math
@@ -9,17 +13,18 @@ import time
 import asyncio
 
 import numpy as np
+import httpx
 import openai
 import requests
-from transformers import AutoTokenizer
 from tqdm.asyncio import tqdm
+from transformers import AutoTokenizer
 
 from ATTS.dataset import load_my_dataset
 
 model_client = None
+ppl_client = None
 model_name = ""
 tokenizer = None
-use_chat_template = False
 
 
 def build_question(question):
@@ -57,6 +62,7 @@ def build_init_prompt(question):
 
 
 async def call_model_generate(prompt, max_tokens, temperature):
+    """Generate text via /v1/chat/completions (no logprobs)."""
     message = build_init_prompt(prompt[0])
     global model_client, model_name
     response = await asyncio.to_thread(
@@ -70,81 +76,48 @@ async def call_model_generate(prompt, max_tokens, temperature):
     return response.choices[0].message.content
 
 
-async def call_model_ppl(prompt, port):
-    global tokenizer, use_chat_template
+async def call_model_ppl(question, generated_text, port):
+    """Compute PPL via prefill-only /generate call.
 
-    if use_chat_template:
-        history_text = "\n\n".join([f"{h}" for h in prompt[1]])
-        template_ids = tokenizer.apply_chat_template(
-            [{"role": "user", "content": build_question(prompt[0])}],
-            tokenize=True,
-            add_generation_prompt=True,
-        )
-        assistant_ids = tokenizer.encode(history_text)
-        input_ids = template_ids + assistant_ids
-
-        prefix_items = prompt[1][:-1]
-        if prefix_items:
-            prefix_text = "\n\n".join(prefix_items) + "\n\n"
-        else:
-            prefix_text = ""
-        prefix_ids = tokenizer.encode(prefix_text)
-        logprob_start_len = len(template_ids) + len(prefix_ids)
-
-        payload = {
-            "input_ids": input_ids,
-            "sampling_params": {"temperature": 0, "max_new_tokens": 1},
-            "return_logprob": True,
-            "logprob_start_len": logprob_start_len,
-            "top_logprobs_num": 1,
-        }
-    else:
-        prompts = "\n\n".join([f"{prompt[1][i]}" for i in range(len(prompt[1]))])
-        message = build_question(prompt[0]) + "\n" + prompts
-
-        last_history_item = prompt[1][-1].strip("\n")
-        position = message.find(last_history_item)
-        if position == -1:
-            raise ValueError("Prompt tokens not found in full tokens.")
-
-        sub_message = message[:position]
-        logprob_start_len = len(tokenizer.tokenize(sub_message))
-
-        payload = {
-            "text": message,
-            "sampling_params": {"temperature": 0, "max_new_tokens": 1},
-            "return_logprob": True,
-            "logprob_start_len": logprob_start_len,
-            "top_logprobs_num": 1,
-        }
-
-    response = await asyncio.to_thread(
-        requests.post,
-        f"http://localhost:{port}/generate",
-        json=payload,
+    Builds the same prompt prefix as the generation call so that SGLang's
+    prefix cache provides a nearly-free forward pass.
+    """
+    global tokenizer, ppl_client
+    messages = build_init_prompt(question)
+    template_ids = tokenizer.apply_chat_template(
+        messages, tokenize=True, add_generation_prompt=True
     )
+    output_ids = tokenizer.encode(generated_text, add_special_tokens=False)
+    input_ids = template_ids + output_ids
 
-    try:
-        input_token_logprobs = response.json()["meta_info"]["input_token_logprobs"][1:]
-        logprobs = [entry[0] for entry in input_token_logprobs if entry[0] is not None]
-        if not logprobs:
-            return float("inf")
-        avg_neg_logprob = -sum(logprobs) / len(logprobs)
-        return math.exp(avg_neg_logprob)
-    except (KeyError, IndexError, ValueError) as e:
-        print(f"Error parsing PPL response: {e}")
+    payload = {
+        "input_ids": input_ids,
+        "sampling_params": {"temperature": 0, "max_new_tokens": 1},
+        "return_logprob": True,
+        "logprob_start_len": len(template_ids),
+        "top_logprobs_num": 1,
+    }
+
+    resp = await ppl_client.post(f"http://127.0.0.1:{port}/generate", json=payload)
+    resp.raise_for_status()
+    data = resp.json()
+    input_token_logprobs = data["meta_info"]["input_token_logprobs"][1:]
+    logprobs = [entry[0] for entry in input_token_logprobs if entry[0] is not None]
+
+    if not logprobs:
         return float("inf")
+    avg_neg_logprob = -sum(logprobs) / len(logprobs)
+    return math.exp(avg_neg_logprob)
 
 
 async def process_single_problem(problem, max_tokens, temperature, port):
-    prompt = [problem, []]
-    out = await call_model_generate(prompt, max_tokens, temperature)
-    prompt[1].append(out)
-    ppl = await call_model_ppl(prompt, port)
+    text = await call_model_generate([problem, []], max_tokens, temperature)
+    ppl = await call_model_ppl(problem, text, port)
     return ppl
 
 
-async def compute_ppl(problems, max_tokens, ppl_array_path, temperature, port, max_concurrent=16):
+async def compute_ppl(problems, max_tokens, ppl_array_path, temperature,
+                      max_concurrent=16, port=40000):
     semaphore = asyncio.Semaphore(max_concurrent)
 
     async def process_with_semaphore(problem):
@@ -170,20 +143,23 @@ async def main():
     parser.add_argument("--use_chat_template", action="store_true", default=False)
     args = parser.parse_args()
 
-    global model_client, model_name, tokenizer, use_chat_template
+    global model_client, model_name, ppl_client, tokenizer
     model_name = args.model_name
-    use_chat_template = args.use_chat_template
 
     model_client = openai.Client(
         base_url=f"http://127.0.0.1:{args.model_port}/v1", api_key="None"
     )
+
+    ppl_client = httpx.AsyncClient(
+        timeout=24000.0,
+        limits=httpx.Limits(max_connections=1000, max_keepalive_connections=1000),
+    )
+
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
-    tokenizer.use_default_system_prompt = True
 
     context, answer = load_my_dataset(args.dataset_name, args.sample_size)
 
-    import os
-    print(f"Single-model conformal calibration")
+    print(f"Single-model conformal calibration (prefill PPL, prefix-cache friendly)")
     print(f"  Model: {args.model_name}")
     print(f"  Dataset: {args.dataset_name} ({len(context)} samples)")
     print(f"  Saving to: {args.ppl_array_path}")
@@ -204,24 +180,18 @@ async def main():
     else:
         raise RuntimeError(f"Server on port {args.model_port} not reachable")
 
-    print("Testing /v1/chat/completions endpoint...")
-    test_resp = model_client.chat.completions.create(
-        model=model_name,
-        messages=[{"role": "user", "content": "1+1="}],
-        max_tokens=5,
-    )
-    print(f"  Test response: {test_resp.choices[0].message.content!r} - OK")
-
     start_time = time.time()
     await compute_ppl(
         problems=context,
         max_tokens=args.max_tokens,
         ppl_array_path=args.ppl_array_path,
         temperature=args.temperature,
-        port=args.model_port,
         max_concurrent=args.max_concurrent,
+        port=args.model_port,
     )
     print(f"Elapsed: {time.time() - start_time:.3f}s")
+
+    await ppl_client.aclose()
 
 
 if __name__ == "__main__":

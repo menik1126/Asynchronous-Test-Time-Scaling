@@ -1,12 +1,17 @@
-"""Single-model asynchronous test-time scaling.
+"""Single-model asynchronous test-time scaling with rejection sampling + cross-sample forking.
 
-The same model acts as both the draft generator and the PPL evaluator / continuer.
-When the self-evaluated PPL percentile exceeds the threshold, the model generates
-additional tokens to refine its own answer (instead of handing off to a target model).
+Extends ref_async_self_reject.py with a shared sample pool. When a sample is
+rejected, instead of blindly resampling from its own prefix, it can **fork**
+from the globally best sample (scored by avg_ppl - alpha * current_turn).
 
-PPL is computed via a separate prefill-only forward pass using the /generate endpoint.
-The generation and PPL calls share the same prompt prefix, leveraging SGLang's prefix
-caching so the PPL evaluation reuses cached KV states and is nearly free.
+Key differences from ref_async_self_reject.py:
+  - All samples of the same problem share a SamplePool with async locking.
+  - Each sample tracks cumulative PPL history (avg_ppl over accepted turns).
+  - On rejection, the sample forks from the best-scored peer in the pool,
+    copying its full history and PPL record, then continues with a diversity
+    perturbation and higher temperature.
+  - A progress reward (alpha * current_turn) prevents short chains from
+    dominating the score purely due to having fewer turns.
 """
 import argparse
 import httpx
@@ -17,6 +22,8 @@ import time
 import re
 import os
 import json
+from copy import deepcopy
+from dataclasses import dataclass, field
 
 from tqdm.asyncio import tqdm
 from tqdm import tqdm as sync_tqdm
@@ -33,6 +40,74 @@ max_retries = 3
 extract_mode = "regex"
 
 
+# ---------------------------------------------------------------------------
+# SampleState + SamplePool
+# ---------------------------------------------------------------------------
+
+@dataclass
+class SampleState:
+    idx: int
+    history: list = field(default_factory=list)
+    ppl_history: list = field(default_factory=list)
+    current_turn: int = 0
+    finished: bool = False
+
+    @property
+    def avg_ppl(self) -> float:
+        if not self.ppl_history:
+            return float("inf")
+        return sum(self.ppl_history) / len(self.ppl_history)
+
+    def score(self, alpha: float) -> float:
+        """Lower is better. Avg PPL penalised, progress rewarded."""
+        return self.avg_ppl - alpha * self.current_turn
+
+
+class SamplePool:
+    """Thread-safe (asyncio-safe) shared state for all samples of one problem."""
+
+    def __init__(self):
+        self._states: dict[int, SampleState] = {}
+        self._lock = asyncio.Lock()
+
+    def register(self, idx: int):
+        self._states[idx] = SampleState(idx=idx)
+
+    async def update(self, idx: int, history: list, ppl_history: list, turn: int):
+        async with self._lock:
+            st = self._states[idx]
+            st.history = list(history)
+            st.ppl_history = list(ppl_history)
+            st.current_turn = turn
+
+    async def mark_finished(self, idx: int):
+        async with self._lock:
+            self._states[idx].finished = True
+
+    async def best_peer(self, exclude_idx: int, alpha: float):
+        """Return a *snapshot* of the best-scored peer, or None."""
+        async with self._lock:
+            candidates = [
+                s for s in self._states.values()
+                if s.idx != exclude_idx
+                and len(s.history) > 0
+                and not s.finished
+            ]
+            if not candidates:
+                return None
+            best = min(candidates, key=lambda s: s.score(alpha))
+            return SampleState(
+                idx=best.idx,
+                history=list(best.history),
+                ppl_history=list(best.ppl_history),
+                current_turn=best.current_turn,
+            )
+
+
+# ---------------------------------------------------------------------------
+# Network helpers (identical to ref_async_self_reject.py)
+# ---------------------------------------------------------------------------
+
 async def _post_with_retry(http_client, url, payload):
     for attempt in range(max_retries):
         try:
@@ -47,6 +122,10 @@ async def _post_with_retry(http_client, url, payload):
             else:
                 raise
 
+
+# ---------------------------------------------------------------------------
+# Prompt builders (identical to ref_async_self_reject.py)
+# ---------------------------------------------------------------------------
 
 def build_question(question):
     if isinstance(question, str):
@@ -92,8 +171,11 @@ def build_continue_prompt(question, history):
     ]
 
 
+# ---------------------------------------------------------------------------
+# Model calls (identical to ref_async_self_reject.py)
+# ---------------------------------------------------------------------------
+
 async def call_model_generate(prompt, turn, max_tokens, idx, port, temperature):
-    """Generate tokens via /v1/chat/completions (no logprobs)."""
     messages = (
         build_init_prompt(prompt[0])
         if turn == 0
@@ -115,11 +197,6 @@ async def call_model_generate(prompt, turn, max_tokens, idx, port, temperature):
 
 
 async def call_model_ppl(prompt, turn, idx, port):
-    """Compute PPL of the latest output via prefill-only /generate call.
-
-    Reconstructs the same token prefix that the generation call used,
-    so SGLang's prefix cache provides a nearly-free forward pass.
-    """
     global tokenizer, client, model_semaphore
 
     if turn == 0:
@@ -166,6 +243,10 @@ async def call_model_ppl(prompt, turn, idx, port):
         avg_neg_logprob = -sum(logprobs) / len(logprobs)
         return math.exp(avg_neg_logprob)
 
+
+# ---------------------------------------------------------------------------
+# Answer extraction (identical to ref_async_self_reject.py)
+# ---------------------------------------------------------------------------
 
 def _extract_boxed_balanced(text):
     """Extract content from \\boxed{...} with balanced brace matching."""
@@ -264,50 +345,175 @@ async def extract_answer(history):
     return await extract_answer_regex(history)
 
 
+# ---------------------------------------------------------------------------
+# Core logic – process_single_problem with cross-sample forking
+# ---------------------------------------------------------------------------
+
+DIVERSITY_PROMPTS = [
+    "Wait, let me reconsider this problem from a different angle.\n\n",
+    "Hmm, I think there might be a simpler approach. Let me try again.\n\n",
+    "Let me verify my reasoning by trying an alternative method.\n\n",
+    "I should double-check this. Let me rethink step by step.\n\n",
+]
+
+
 async def process_single_problem(
     problem,
     max_tokens,
-    continue_max_tokens,
     ppl_array,
     turns,
     idx,
     port,
     temperature,
     output_dir,
+    ppl_threshold,
+    max_reject_attempts,
+    pool: SamplePool,
+    alpha: float,
+    fork_temperature: float,
+    fork_gap: float = 0.05,
 ):
-    """Multi-turn self-evaluation loop with a single model.
+    """Multi-turn loop with rejection sampling + cross-sample forking.
 
     Each turn:
-      1. Model generates a draft chunk.
-      2. PPL is computed via a prefill-only forward pass (prefix-cache friendly).
-      3. If PPL percentile >= 0.6, model generates *more* tokens to refine.
-      4. Check for a valid answer; early-stop if found.
+      1. Generate a draft.
+      2. Compute PPL via prefill (prefix-cache friendly).
+      3. If PPL percentile >= threshold → reject.
+         After max_reject_attempts failures, try to fork from the best peer.
+         If no peer available, keep the best rejected output.
+      4. If PPL percentile < threshold → accept.
+      5. Publish updated state to the shared pool.
+      6. Check for a valid answer; early-stop if found.
     """
     prompt = [problem, []]
     answer = "invalid"
     start_time = time.time()
     history_log = []
+    ppl_record = []
+    forked_from = None
 
     for turn in range(turns):
-        out = await call_model_generate(prompt, turn, max_tokens, idx, port, temperature)
-        history_log.append({"turn": turn, "model": "draft", "output": out})
-        prompt[1].append(out)
+        best_out = None
+        best_ppl = float("inf")
+        accepted = False
 
-        if not out:
-            print(f"[idx={idx}] Empty output at turn {turn}", flush=True)
+        cur_temp = fork_temperature if forked_from is not None else temperature
+        if forked_from is not None:
+            forked_from = None
+
+        for attempt in range(max_reject_attempts):
+            out = await call_model_generate(prompt, turn, max_tokens, idx, port, cur_temp)
+
+            if not out:
+                print(f"[idx={idx}] Empty output at turn {turn} attempt {attempt}", flush=True)
+                break
+
+            prompt[1].append(out)
+
+            temp_ans = await extract_answer(prompt[1])
+            if temp_ans != "invalid":
+                ppl = await call_model_ppl(prompt, turn, idx, port)
+                ppl_record.append(float(ppl))
+                history_log.append({
+                    "turn": turn, "attempt": attempt,
+                    "model": "draft", "output": out,
+                    "ppl": float(ppl), "percentile": 0.0,
+                    "accepted": True,
+                    "accepted_reason": "answer_found",
+                })
+                answer = temp_ans
+                accepted = True
+                print(f"[idx={idx}] Answer found at turn {turn} attempt {attempt}, skip PPL check", flush=True)
+                break
+
+            ppl = await call_model_ppl(prompt, turn, idx, port)
+            prompt[1].pop()
+
+            rank = np.sum(ppl_array < ppl)
+            percent = rank / len(ppl_array)
+
+            history_log.append({
+                "turn": turn, "attempt": attempt,
+                "model": "draft", "output": out,
+                "ppl": float(ppl), "percentile": float(percent),
+                "accepted": bool(percent < ppl_threshold),
+            })
+
+            if ppl < best_ppl:
+                best_ppl = ppl
+                best_out = out
+
+            if percent < ppl_threshold:
+                accepted = True
+                prompt[1].append(out)
+                ppl_record.append(float(ppl))
+                break
+            else:
+                if attempt < max_reject_attempts - 1:
+                    print(
+                        f"[idx={idx}] Rejected at turn {turn} attempt {attempt} "
+                        f"(ppl={ppl:.2f}, pct={percent:.2f})",
+                        flush=True,
+                    )
+
+        if answer != "invalid":
+            await pool.update(idx, prompt[1], ppl_record, turn + 1)
+            print(f"[idx={idx}] Early stop at turn {turn}", flush=True)
             break
 
-        ppl = await call_model_ppl(prompt, turn, idx, port)
-        rank = np.sum(ppl_array < ppl)
-        percent = rank / len(ppl_array)
-        history_log.append({"turn": turn, "model": "self_ppl", "ppl": ppl, "percentile": percent})
+        if not accepted:
+            # --- Cross-sample fork ---
+            peer = await pool.best_peer(exclude_idx=idx, alpha=alpha)
 
-        if percent >= 0.6:
-            continue_out = await call_model_generate(
-                prompt, turn + 1, continue_max_tokens, idx, port, temperature
+            my_avg_ppl = (
+                sum(ppl_record) / len(ppl_record) if ppl_record else float("inf")
             )
-            history_log.append({"turn": turn, "model": "self_continue", "output": continue_out})
-            prompt[1].append(continue_out)
+            my_score = my_avg_ppl - alpha * turn
+            peer_avg_ppl = peer.avg_ppl if peer else float("inf")
+            peer_score = peer.score(alpha) if peer else float("inf")
+
+            score_gap = my_score - peer_score if peer is not None else 0.0
+            ppl_gap = my_avg_ppl - peer_avg_ppl if peer is not None else 0.0
+            if peer is not None and score_gap >= fork_gap and ppl_gap >= 0.02:
+                prompt[1] = list(peer.history)
+                ppl_record = list(peer.ppl_history)
+                forked_turn = peer.current_turn
+                forked_from = peer.idx
+
+                diversity_hint = DIVERSITY_PROMPTS[idx % len(DIVERSITY_PROMPTS)]
+                prompt[1].append(diversity_hint)
+                ppl_record.append(best_ppl if best_ppl < float("inf") else 3.0)
+
+                history_log.append({
+                    "turn": turn, "event": "fork",
+                    "forked_from": peer.idx,
+                    "peer_score": float(peer_score),
+                    "my_score": float(my_score),
+                    "score_gap": float(score_gap),
+                    "my_avg_ppl": float(my_avg_ppl),
+                    "peer_avg_ppl": float(peer_avg_ppl),
+                    "ppl_gap": float(ppl_gap),
+                    "peer_turn": forked_turn,
+                })
+
+                print(
+                    f"[idx={idx}] Forked from idx={peer.idx} at turn {turn} "
+                    f"(my_ppl={my_avg_ppl:.3f}, peer_ppl={peer_avg_ppl:.3f}, ppl_gap={ppl_gap:.3f})",
+                    flush=True,
+                )
+            elif best_out is not None:
+                prompt[1].append(best_out)
+                ppl_record.append(float(best_ppl))
+                print(
+                    f"[idx={idx}] All {max_reject_attempts} attempts rejected at turn {turn}, "
+                    f"keeping best (ppl={best_ppl:.2f})",
+                    flush=True,
+                )
+            else:
+                print(f"[idx={idx}] Empty output at turn {turn}", flush=True)
+                break
+
+        await pool.update(idx, prompt[1], ppl_record, turn + 1)
 
         temp_ans = await extract_answer(prompt[1])
         if temp_ans != "invalid":
@@ -318,12 +524,16 @@ async def process_single_problem(
     if answer == "invalid":
         answer = await extract_answer(prompt[1])
 
+    await pool.mark_finished(idx)
+
     result_data = {
         "problem_index": idx,
         "final_answer": answer,
         "duration_seconds": time.time() - start_time,
         "full_history": history_log,
         "question": problem,
+        "ppl_history": ppl_record,
+        "avg_ppl": sum(ppl_record) / len(ppl_record) if ppl_record else None,
     }
 
     output_filename = os.path.join(output_dir, f"problem_{idx:04d}.json")
@@ -332,6 +542,10 @@ async def process_single_problem(
 
     return ()
 
+
+# ---------------------------------------------------------------------------
+# Scoring
+# ---------------------------------------------------------------------------
 
 async def compute_score(results, answers, repeats):
     generated_ans = [ans for ans, _ in results]
@@ -350,21 +564,34 @@ async def compute_score(results, answers, repeats):
     print(f"Accuracy: {right / group:.2%}")
 
 
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
 async def main():
-    parser = argparse.ArgumentParser(description="Single-model async test-time scaling (self-evaluation).")
-    parser.add_argument("--model_name", type=str, required=True, help="Model name (used for everything).")
+    parser = argparse.ArgumentParser(
+        description="Single-model async TTS with rejection sampling + cross-sample forking."
+    )
+    parser.add_argument("--model_name", type=str, required=True)
     parser.add_argument("--dataset_name", type=str, required=True)
-    parser.add_argument("--ppl_array_path", type=str, required=True, help="Path to PPL array (.npy) from conformal calibration.")
+    parser.add_argument("--ppl_array_path", type=str, required=True)
     parser.add_argument("--model_port", type=int, default=40000)
-    parser.add_argument("--max_tokens", type=int, default=500, help="Max tokens per draft turn.")
-    parser.add_argument("--continue_max_tokens", type=int, default=500, help="Max tokens for continuation when PPL is high.")
-    parser.add_argument("--turns", type=int, default=15, help="Max number of turns.")
+    parser.add_argument("--max_tokens", type=int, default=500)
+    parser.add_argument("--turns", type=int, default=15)
     parser.add_argument("--repeats", type=int, default=16)
     parser.add_argument("--temperature", type=float, default=0.8)
-    parser.add_argument("--concurrency", type=int, default=16, help="Max concurrent requests to the model.")
+    parser.add_argument("--concurrency", type=int, default=16)
     parser.add_argument("--max_retries", type=int, default=3)
     parser.add_argument("--extract_mode", type=str, choices=["regex", "llm"], default="regex")
     parser.add_argument("--output_dir", type=str, required=True)
+    parser.add_argument("--ppl_threshold", type=float, default=0.6)
+    parser.add_argument("--max_reject_attempts", type=int, default=3)
+    parser.add_argument("--alpha", type=float, default=0.1,
+                        help="Progress reward weight in fork scoring (default: 0.1).")
+    parser.add_argument("--fork_temperature", type=float, default=1.0,
+                        help="Temperature for generation right after a fork (default: 1.0).")
+    parser.add_argument("--fork_gap", type=float, default=0.05,
+                        help="Minimum composite score gap (my_score - peer_score) required to fork (default: 0.05).")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -415,38 +642,53 @@ async def main():
         await compute_score(all_results, answer, args.repeats)
         return
 
-    print(f"Single-model async evaluation (prefill PPL, prefix-cache friendly)")
+    print(f"Single-model async evaluation (rejection sampling + cross-sample forking)")
     print(f"  Model: {args.model_name}")
     print(f"  Dataset: {args.dataset_name}")
+    print(f"  PPL threshold: {args.ppl_threshold}")
+    print(f"  Max reject attempts: {args.max_reject_attempts}")
+    print(f"  Alpha (progress reward): {args.alpha}")
+    print(f"  Fork temperature: {args.fork_temperature}")
+    print(f"  Fork gap (score): {args.fork_gap}")
     print(f"  {len(unique_problems_to_process)} groups to process")
 
     start_time = time.time()
 
-    for unique_idx in sync_tqdm(unique_problems_to_process, desc="Processing problem groups"):
-        tasks_to_run = []
+    all_tasks = []
+    pools = {}
+    for unique_idx in unique_problems_to_process:
+        pool = SamplePool()
+        pools[unique_idx] = pool
+
         start_sample_idx = unique_idx * args.repeats
         end_sample_idx = start_sample_idx + args.repeats
 
         for sample_idx in range(start_sample_idx, end_sample_idx):
             if sample_idx not in processed_sample_indices:
+                pool.register(sample_idx)
                 problem = context[sample_idx]
                 task = asyncio.create_task(
                     process_single_problem(
                         problem,
                         args.max_tokens,
-                        args.continue_max_tokens,
                         ppl_array,
                         args.turns,
                         sample_idx,
                         args.model_port,
                         args.temperature,
                         args.output_dir,
+                        args.ppl_threshold,
+                        args.max_reject_attempts,
+                        pool,
+                        args.alpha,
+                        args.fork_temperature,
+                        args.fork_gap,
                     )
                 )
-                tasks_to_run.append(task)
+                all_tasks.append(task)
 
-        if tasks_to_run:
-            await tqdm.gather(*tasks_to_run, desc=f"Group {unique_idx} samples")
+    print(f"  Launched {len(all_tasks)} tasks across {len(unique_problems_to_process)} groups (all parallel)")
+    await tqdm.gather(*all_tasks, desc="All samples")
 
     print(f"Time: {time.time() - start_time:.3f}s")
 

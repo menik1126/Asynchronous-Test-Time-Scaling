@@ -1,12 +1,15 @@
-"""Single-model asynchronous test-time scaling.
+"""Single-model asynchronous test-time scaling with TRUE rejection sampling.
 
-The same model acts as both the draft generator and the PPL evaluator / continuer.
-When the self-evaluated PPL percentile exceeds the threshold, the model generates
-additional tokens to refine its own answer (instead of handing off to a target model).
+Unlike the self-refine variant (ref_async_self.py) which appends continuation tokens
+when PPL is high, this version discards rejected outputs and resamples from scratch.
 
-PPL is computed via a separate prefill-only forward pass using the /generate endpoint.
-The generation and PPL calls share the same prompt prefix, leveraging SGLang's prefix
-caching so the PPL evaluation reuses cached KV states and is nearly free.
+Each turn:
+  1. Generate a draft.
+  2. Compute PPL via prefill-only forward pass (prefix-cache friendly).
+  3. If PPL percentile >= threshold → REJECT: discard output, resample (up to max_reject_attempts).
+     Among all rejected attempts, keep the one with lowest PPL if all are rejected.
+  4. If PPL percentile < threshold → ACCEPT: keep the output.
+  5. Check for a valid answer; early-stop if found.
 """
 import argparse
 import httpx
@@ -115,11 +118,7 @@ async def call_model_generate(prompt, turn, max_tokens, idx, port, temperature):
 
 
 async def call_model_ppl(prompt, turn, idx, port):
-    """Compute PPL of the latest output via prefill-only /generate call.
-
-    Reconstructs the same token prefix that the generation call used,
-    so SGLang's prefix cache provides a nearly-free forward pass.
-    """
+    """Compute PPL of the latest output via prefill-only /generate call."""
     global tokenizer, client, model_semaphore
 
     if turn == 0:
@@ -267,21 +266,25 @@ async def extract_answer(history):
 async def process_single_problem(
     problem,
     max_tokens,
-    continue_max_tokens,
     ppl_array,
     turns,
     idx,
     port,
     temperature,
     output_dir,
+    ppl_threshold,
+    max_reject_attempts,
 ):
-    """Multi-turn self-evaluation loop with a single model.
+    """Multi-turn loop with true rejection sampling.
 
     Each turn:
-      1. Model generates a draft chunk.
-      2. PPL is computed via a prefill-only forward pass (prefix-cache friendly).
-      3. If PPL percentile >= 0.6, model generates *more* tokens to refine.
-      4. Check for a valid answer; early-stop if found.
+      1. Generate a draft.
+      2. Check if the draft already contains a valid answer → accept immediately.
+      3. Compute PPL via prefill (prefix-cache friendly).
+      4. If PPL percentile >= threshold → reject, discard, resample (up to max_reject_attempts).
+         If all attempts rejected, keep the best (lowest PPL) one.
+      5. If PPL percentile < threshold → accept.
+      6. Check for a valid answer; early-stop if found.
     """
     prompt = [problem, []]
     answer = "invalid"
@@ -289,25 +292,69 @@ async def process_single_problem(
     history_log = []
 
     for turn in range(turns):
-        out = await call_model_generate(prompt, turn, max_tokens, idx, port, temperature)
-        history_log.append({"turn": turn, "model": "draft", "output": out})
-        prompt[1].append(out)
+        best_out = None
+        best_ppl = float("inf")
+        accepted = False
 
-        if not out:
-            print(f"[idx={idx}] Empty output at turn {turn}", flush=True)
+        for attempt in range(max_reject_attempts):
+            out = await call_model_generate(prompt, turn, max_tokens, idx, port, temperature)
+
+            if not out:
+                print(f"[idx={idx}] Empty output at turn {turn} attempt {attempt}", flush=True)
+                break
+
+            prompt[1].append(out)
+
+            temp_ans = await extract_answer(prompt[1])
+            if temp_ans != "invalid":
+                history_log.append({
+                    "turn": turn, "attempt": attempt,
+                    "model": "draft", "output": out,
+                    "ppl": 0.0, "percentile": 0.0,
+                    "accepted": True,
+                    "accepted_reason": "answer_found",
+                })
+                answer = temp_ans
+                accepted = True
+                print(f"[idx={idx}] Answer found at turn {turn} attempt {attempt}, skip PPL", flush=True)
+                break
+
+            ppl = await call_model_ppl(prompt, turn, idx, port)
+            prompt[1].pop()
+
+            rank = np.sum(ppl_array < ppl)
+            percent = rank / len(ppl_array)
+
+            history_log.append({
+                "turn": turn, "attempt": attempt,
+                "model": "draft", "output": out,
+                "ppl": float(ppl), "percentile": float(percent),
+                "accepted": bool(percent < ppl_threshold),
+            })
+
+            if ppl < best_ppl:
+                best_ppl = ppl
+                best_out = out
+
+            if percent < ppl_threshold:
+                accepted = True
+                prompt[1].append(out)
+                break
+            else:
+                if attempt < max_reject_attempts - 1:
+                    print(f"[idx={idx}] Rejected at turn {turn} attempt {attempt} (ppl={ppl:.2f}, pct={percent:.2f})", flush=True)
+
+        if answer != "invalid":
+            print(f"[idx={idx}] Early stop at turn {turn}", flush=True)
             break
 
-        ppl = await call_model_ppl(prompt, turn, idx, port)
-        rank = np.sum(ppl_array < ppl)
-        percent = rank / len(ppl_array)
-        history_log.append({"turn": turn, "model": "self_ppl", "ppl": ppl, "percentile": percent})
-
-        if percent >= 0.6:
-            continue_out = await call_model_generate(
-                prompt, turn + 1, continue_max_tokens, idx, port, temperature
-            )
-            history_log.append({"turn": turn, "model": "self_continue", "output": continue_out})
-            prompt[1].append(continue_out)
+        if not accepted:
+            if best_out is not None:
+                prompt[1].append(best_out)
+                print(f"[idx={idx}] All {max_reject_attempts} attempts rejected at turn {turn}, keeping best (ppl={best_ppl:.2f})", flush=True)
+            else:
+                print(f"[idx={idx}] Empty output at turn {turn}", flush=True)
+                break
 
         temp_ans = await extract_answer(prompt[1])
         if temp_ans != "invalid":
@@ -351,20 +398,23 @@ async def compute_score(results, answers, repeats):
 
 
 async def main():
-    parser = argparse.ArgumentParser(description="Single-model async test-time scaling (self-evaluation).")
-    parser.add_argument("--model_name", type=str, required=True, help="Model name (used for everything).")
+    parser = argparse.ArgumentParser(description="Single-model async TTS with true rejection sampling.")
+    parser.add_argument("--model_name", type=str, required=True)
     parser.add_argument("--dataset_name", type=str, required=True)
-    parser.add_argument("--ppl_array_path", type=str, required=True, help="Path to PPL array (.npy) from conformal calibration.")
+    parser.add_argument("--ppl_array_path", type=str, required=True)
     parser.add_argument("--model_port", type=int, default=40000)
-    parser.add_argument("--max_tokens", type=int, default=500, help="Max tokens per draft turn.")
-    parser.add_argument("--continue_max_tokens", type=int, default=500, help="Max tokens for continuation when PPL is high.")
-    parser.add_argument("--turns", type=int, default=15, help="Max number of turns.")
+    parser.add_argument("--max_tokens", type=int, default=500)
+    parser.add_argument("--turns", type=int, default=15)
     parser.add_argument("--repeats", type=int, default=16)
     parser.add_argument("--temperature", type=float, default=0.8)
-    parser.add_argument("--concurrency", type=int, default=16, help="Max concurrent requests to the model.")
+    parser.add_argument("--concurrency", type=int, default=16)
     parser.add_argument("--max_retries", type=int, default=3)
     parser.add_argument("--extract_mode", type=str, choices=["regex", "llm"], default="regex")
     parser.add_argument("--output_dir", type=str, required=True)
+    parser.add_argument("--ppl_threshold", type=float, default=0.6,
+                        help="PPL percentile threshold for rejection (default: 0.6).")
+    parser.add_argument("--max_reject_attempts", type=int, default=3,
+                        help="Max resample attempts per turn before accepting best (default: 3).")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -415,9 +465,11 @@ async def main():
         await compute_score(all_results, answer, args.repeats)
         return
 
-    print(f"Single-model async evaluation (prefill PPL, prefix-cache friendly)")
+    print(f"Single-model async evaluation (TRUE rejection sampling)")
     print(f"  Model: {args.model_name}")
     print(f"  Dataset: {args.dataset_name}")
+    print(f"  PPL threshold: {args.ppl_threshold}")
+    print(f"  Max reject attempts: {args.max_reject_attempts}")
     print(f"  {len(unique_problems_to_process)} groups to process")
 
     start_time = time.time()
@@ -434,13 +486,14 @@ async def main():
                     process_single_problem(
                         problem,
                         args.max_tokens,
-                        args.continue_max_tokens,
                         ppl_array,
                         args.turns,
                         sample_idx,
                         args.model_port,
                         args.temperature,
                         args.output_dir,
+                        args.ppl_threshold,
+                        args.max_reject_attempts,
                     )
                 )
                 tasks_to_run.append(task)
