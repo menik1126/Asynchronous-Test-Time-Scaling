@@ -1164,6 +1164,9 @@ class Scheduler:
                     model_worker_batch
                 )
                 bid = model_worker_batch.bid
+                # Carry SnapKV Q cache from forward to batch (for compression later)
+                if getattr(model_worker_batch, "snapkv_q_cache", None):
+                    batch.snapkv_q_cache = model_worker_batch.snapkv_q_cache
             else:
                 (
                     logits_output,
@@ -1321,8 +1324,11 @@ class Scheduler:
                                 adaptive_budget = int(seq_len * self.server_args.kv_compress_ratio)
                                 budget = max(budget, adaptive_budget)
 
+                            # Use cached Q vectors from prefill if available
+                            cached_q = getattr(batch, 'snapkv_q_cache', None)
                             attn_weights = compute_obs_attn_scores(
                                 req, self.req_to_token_pool, kvcache, obs_window=obs_window,
+                                cached_q=cached_q, req_index=i,
                             )
                             if attn_weights is not None:
                                 selected = snapkv_select_positions(

@@ -28,16 +28,14 @@ def compute_obs_attn_scores(
     kvcache,
     obs_window: int = 32,
     layer_ids: Optional[List[int]] = None,
+    cached_q: Optional[dict] = None,
+    req_index: int = 0,
 ) -> torch.Tensor:
     """Compute attention scores from the last obs_window tokens to all tokens.
 
-    Uses the K vectors already stored in the KV cache as a proxy for Q
-    (since Q is not stored). For the observation window positions, we use
-    their own K as an approximation of Q (valid because Q = W_q * h and
-    K = W_k * h share the same hidden state h, and we only need relative
-    ranking, not exact scores).
-
-    This avoids modifying FlashAttention kernels entirely.
+    If cached_q is provided (from prefill's RadixAttention forward), uses the
+    real Q vectors for accurate scoring. Otherwise falls back to using K as
+    a proxy for Q.
 
     Args:
         req: The request object with req_pool_idx.
@@ -45,10 +43,14 @@ def compute_obs_attn_scores(
         kvcache: The KV cache (MHATokenToKVPool or similar).
         obs_window: Number of recent tokens to use as the observation window.
         layer_ids: Which layers to aggregate scores from. If None, uses
-            the last 1/4 of layers (where attention patterns are most stable).
+            the last 1/4 of layers.
+        cached_q: Dict mapping layer_id -> list of per-request Q tensors
+            (from RadixAttention._cache_obs_q). Each tensor has shape
+            [obs_tokens, num_q_heads, head_dim].
+        req_index: Index of the request in the batch (for cached_q lookup).
 
     Returns:
-        Attention weights tensor of shape [num_heads, obs_window, seq_len].
+        Attention weights tensor of shape [num_kv_heads, obs_window, seq_len].
     """
     seq_len = len(req.origin_input_ids) + len(req.output_ids)
     if seq_len <= obs_window:
@@ -61,26 +63,42 @@ def compute_obs_attn_scores(
         start = total_layers * 3 // 4
         layer_ids = list(range(start, total_layers))
 
+    use_real_q = cached_q is not None and any(lid in cached_q for lid in layer_ids)
+
     all_attn = []
     for layer_id in layer_ids:
-        k_buffer = kvcache.get_key_buffer(layer_id)  # [pool_size, num_heads, head_dim]
-        k_seq = k_buffer[kv_indices]  # [seq_len, num_heads, head_dim]
+        k_buffer = kvcache.get_key_buffer(layer_id)
+        k_seq = k_buffer[kv_indices]  # [seq_len, num_kv_heads, head_dim]
+        num_kv_heads = k_seq.shape[1]
+        head_dim = k_seq.shape[2]
 
-        k_obs = k_seq[seq_len - obs_window:]  # [obs_window, num_heads, head_dim]
-        k_all = k_seq  # [seq_len, num_heads, head_dim]
+        k = k_seq.permute(1, 0, 2)  # [num_kv_heads, seq_len, head_dim]
 
-        # [num_heads, obs_window, head_dim] x [num_heads, head_dim, seq_len]
-        # -> [num_heads, obs_window, seq_len]
-        head_dim = k_obs.shape[-1]
-        q = k_obs.permute(1, 0, 2)  # [num_heads, obs_window, head_dim]
-        k = k_all.permute(1, 0, 2)  # [num_heads, seq_len, head_dim]
+        if use_real_q and layer_id in cached_q:
+            q_raw = cached_q[layer_id][req_index]  # [obs, num_q_heads, head_dim]
+            obs_len = min(q_raw.shape[0], obs_window)
+            q_raw = q_raw[-obs_len:]
+            num_q_heads = q_raw.shape[1]
+
+            # GQA: average Q heads within each KV head group
+            if num_q_heads != num_kv_heads:
+                gqa_ratio = num_q_heads // num_kv_heads
+                q_grouped = q_raw.view(obs_len, num_kv_heads, gqa_ratio, head_dim)
+                q_avg = q_grouped.mean(dim=2)  # [obs, num_kv_heads, head_dim]
+            else:
+                q_avg = q_raw
+
+            q = q_avg.permute(1, 0, 2)  # [num_kv_heads, obs_len, head_dim]
+        else:
+            # Fallback: use K as proxy for Q
+            k_obs = k_seq[seq_len - obs_window:]
+            q = k_obs.permute(1, 0, 2)  # [num_kv_heads, obs_window, head_dim]
 
         scores = torch.bmm(q, k.transpose(1, 2)) / math.sqrt(head_dim)
-        attn = torch.softmax(scores, dim=-1)  # [num_heads, obs_window, seq_len]
+        attn = torch.softmax(scores, dim=-1)
         all_attn.append(attn)
 
-    # Average across selected layers
-    attn_weights = torch.stack(all_attn).mean(dim=0)  # [num_heads, obs_window, seq_len]
+    attn_weights = torch.stack(all_attn).mean(dim=0)
     return attn_weights
 
 
