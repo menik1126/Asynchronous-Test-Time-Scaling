@@ -166,6 +166,7 @@ def build_init_prompt(question):
 
 def build_continue_prompt(question, history):
     return [
+        {"role": "system", "content": "You are a math expert."},
         {"role": "user", "content": build_question(question)},
         {"role": "assistant", "content": build_cot(history)},
     ]
@@ -202,7 +203,7 @@ async def call_model_ppl(prompt, turn, idx, port):
     if turn == 0:
         messages = build_init_prompt(prompt[0])
     else:
-        messages = [{"role": "user", "content": build_question(prompt[0])}]
+        messages = [{"role": "system", "content": "You are a math expert."}, {"role": "user", "content": build_question(prompt[0])}]
 
     template_ids = tokenizer.apply_chat_template(
         messages, tokenize=True, add_generation_prompt=True
@@ -276,6 +277,9 @@ async def extract_answer_regex(history):
     answer = "invalid"
     temp = "\n\n".join([f"{history[i]}" for i in range(len(history))])
     matches = _extract_boxed_balanced(temp)
+    if not matches:
+        temp_direct = "".join(history)
+        matches = _extract_boxed_balanced(temp_direct)
     if matches:
         answer = matches[-1]
     else:
@@ -406,7 +410,7 @@ async def process_single_problem(
 
             if not out:
                 print(f"[idx={idx}] Empty output at turn {turn} attempt {attempt}", flush=True)
-                break
+                continue
 
             prompt[1].append(out)
 

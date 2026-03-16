@@ -87,6 +87,7 @@ def build_init_prompt(question):
 
 def build_continue_prompt(question, history):
     return [
+        {"role": "system", "content": "You are a math expert."},
         {"role": "user", "content": build_question(question)},
         {"role": "assistant", "content": build_cot(history)},
     ]
@@ -125,7 +126,7 @@ async def call_model_ppl(prompt, turn, idx, port):
     if turn == 0:
         messages = build_init_prompt(prompt[0])
     else:
-        messages = [{"role": "user", "content": build_question(prompt[0])}]
+        messages = [{"role": "system", "content": "You are a math expert."}, {"role": "user", "content": build_question(prompt[0])}]
 
     template_ids = tokenizer.apply_chat_template(
         messages, tokenize=True, add_generation_prompt=True
@@ -195,6 +196,9 @@ async def extract_answer_regex(history):
     answer = "invalid"
     temp = "\n\n".join([f"{history[i]}" for i in range(len(history))])
     matches = _extract_boxed_balanced(temp)
+    if not matches:
+        temp_direct = "".join(history)
+        matches = _extract_boxed_balanced(temp_direct)
     if matches:
         answer = matches[-1]
     else:
@@ -290,11 +294,18 @@ async def process_single_problem(
 
     for turn in range(turns):
         out = await call_model_generate(prompt, turn, max_tokens, idx, port, temperature)
+
+        if not out:
+            print(f"[idx={idx}] Empty output at turn {turn}, retrying", flush=True)
+            continue
+
         history_log.append({"turn": turn, "model": "draft", "output": out})
         prompt[1].append(out)
 
-        if not out:
-            print(f"[idx={idx}] Empty output at turn {turn}", flush=True)
+        temp_ans = await extract_answer(prompt[1])
+        if temp_ans != "invalid":
+            answer = temp_ans
+            print(f"[idx={idx}] Early stop at turn {turn}", flush=True)
             break
 
         ppl = await call_model_ppl(prompt, turn, idx, port)
@@ -306,8 +317,9 @@ async def process_single_problem(
             continue_out = await call_model_generate(
                 prompt, turn + 1, continue_max_tokens, idx, port, temperature
             )
-            history_log.append({"turn": turn, "model": "self_continue", "output": continue_out})
-            prompt[1].append(continue_out)
+            if continue_out:
+                history_log.append({"turn": turn, "model": "self_continue", "output": continue_out})
+                prompt[1].append(continue_out)
 
         temp_ans = await extract_answer(prompt[1])
         if temp_ans != "invalid":

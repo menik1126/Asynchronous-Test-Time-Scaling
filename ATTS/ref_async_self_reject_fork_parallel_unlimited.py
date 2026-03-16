@@ -276,6 +276,9 @@ async def extract_answer_regex(history):
     answer = "invalid"
     temp = "\n\n".join([f"{history[i]}" for i in range(len(history))])
     matches = _extract_boxed_balanced(temp)
+    if not matches:
+        temp_direct = "".join(history)
+        matches = _extract_boxed_balanced(temp_direct)
     if matches:
         answer = matches[-1]
     else:
@@ -406,7 +409,7 @@ async def process_single_problem(
 
             if not out:
                 print(f"[idx={idx}] Empty output at turn {turn} attempt {attempt}", flush=True)
-                break
+                continue
 
             prompt[1].append(out)
 
