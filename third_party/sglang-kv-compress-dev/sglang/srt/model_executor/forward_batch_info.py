@@ -29,6 +29,7 @@ ScheduleBatch -> ModelWorkerBatch -> ForwardBatch
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from enum import IntEnum, auto
 from typing import TYPE_CHECKING, List, Optional, Union
@@ -317,9 +318,11 @@ class ForwardBatch:
             model_runner.lora_manager.prepare_lora_batch(ret)
 
         # SnapKV Q caching: tell attention layers to save Q vectors during extend
+        # Set SGLANG_SNAPKV_USE_CACHED_Q=0 to disable (falls back to K*K scoring)
         if (
             ret.forward_mode.is_extend()
             and getattr(model_runner.server_args, "enable_kv_compress", False)
+            and os.environ.get("SGLANG_SNAPKV_USE_CACHED_Q", "1") != "0"
         ):
             total_layers = model_runner.model_config.num_hidden_layers
             start_layer = total_layers * 3 // 4

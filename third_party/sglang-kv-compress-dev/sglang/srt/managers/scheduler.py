@@ -1303,11 +1303,13 @@ class Scheduler:
                     # SnapKV attention-only compression: shorten the attention window
                     # without freeing slots (tree still owns them for prefix sharing).
                     # This reduces decode compute while preserving radix cache hit rate.
+                    # Skip for short-decode requests (e.g., PPL with max_new_tokens=1).
                     if (
                         not req.finished()
                         and self.server_args.enable_kv_compress
                         and not getattr(req, "is_kv_compressed", False)
                         and req.seqlen >= self.server_args.kv_compress_min_seq_len
+                        and req.sampling_params.max_new_tokens > 1
                     ):
                         from sglang.srt.mem_cache.snapkv import (
                             compute_obs_attn_scores,
