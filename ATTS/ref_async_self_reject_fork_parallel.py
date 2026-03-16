@@ -50,6 +50,7 @@ class SampleState:
     history: list = field(default_factory=list)
     ppl_history: list = field(default_factory=list)
     current_turn: int = 0
+    total_chars: int = 0
     finished: bool = False
 
     @property
@@ -58,9 +59,9 @@ class SampleState:
             return float("inf")
         return sum(self.ppl_history) / len(self.ppl_history)
 
-    def score(self, alpha: float) -> float:
-        """Lower is better. Avg PPL penalised, progress rewarded."""
-        return self.avg_ppl - alpha * self.current_turn
+    def score(self, alpha: float, beta: float = 0.0) -> float:
+        """Lower is better. Avg PPL penalised, progress and length rewarded."""
+        return self.avg_ppl - alpha * self.current_turn - beta * (self.total_chars / 1000)
 
 
 class SamplePool:
@@ -79,12 +80,13 @@ class SamplePool:
             st.history = list(history)
             st.ppl_history = list(ppl_history)
             st.current_turn = turn
+            st.total_chars = sum(len(h) for h in history)
 
     async def mark_finished(self, idx: int):
         async with self._lock:
             self._states[idx].finished = True
 
-    async def best_peer(self, exclude_idx: int, alpha: float):
+    async def best_peer(self, exclude_idx: int, alpha: float, beta: float = 0.0):
         """Return a *snapshot* of the best-scored peer, or None."""
         async with self._lock:
             candidates = [
@@ -95,12 +97,13 @@ class SamplePool:
             ]
             if not candidates:
                 return None
-            best = min(candidates, key=lambda s: s.score(alpha))
+            best = min(candidates, key=lambda s: s.score(alpha, beta))
             return SampleState(
                 idx=best.idx,
                 history=list(best.history),
                 ppl_history=list(best.ppl_history),
                 current_turn=best.current_turn,
+                total_chars=best.total_chars,
             )
 
 
@@ -376,6 +379,7 @@ async def process_single_problem(
     alpha: float,
     fork_temperature: float,
     fork_gap: float = 0.05,
+    beta: float = 0.0,
 ):
     """Multi-turn loop with rejection sampling + cross-sample forking.
 
@@ -467,14 +471,15 @@ async def process_single_problem(
 
         if not accepted:
             # --- Cross-sample fork ---
-            peer = await pool.best_peer(exclude_idx=idx, alpha=alpha)
+            peer = await pool.best_peer(exclude_idx=idx, alpha=alpha, beta=beta)
 
+            my_chars = sum(len(h) for h in prompt[1])
             my_avg_ppl = (
                 sum(ppl_record) / len(ppl_record) if ppl_record else float("inf")
             )
-            my_score = my_avg_ppl - alpha * turn
+            my_score = my_avg_ppl - alpha * turn - beta * (my_chars / 1000)
             peer_avg_ppl = peer.avg_ppl if peer else float("inf")
-            peer_score = peer.score(alpha) if peer else float("inf")
+            peer_score = peer.score(alpha, beta) if peer else float("inf")
 
             score_gap = my_score - peer_score if peer is not None else 0.0
             ppl_gap = my_avg_ppl - peer_avg_ppl if peer is not None else 0.0
@@ -596,6 +601,9 @@ async def main():
                         help="Temperature for generation right after a fork (default: 1.0).")
     parser.add_argument("--fork_gap", type=float, default=0.05,
                         help="Minimum composite score gap (my_score - peer_score) required to fork (default: 0.05).")
+    parser.add_argument("--beta", type=float, default=0.0,
+                        help="Length reward weight in fork scoring: score -= beta * (total_chars/1000). "
+                             "Higher beta favors forking from peers with longer reasoning chains (default: 0.0).")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -654,6 +662,7 @@ async def main():
     print(f"  Alpha (progress reward): {args.alpha}")
     print(f"  Fork temperature: {args.fork_temperature}")
     print(f"  Fork gap (score): {args.fork_gap}")
+    print(f"  Beta (length reward): {args.beta}")
     print(f"  {len(unique_problems_to_process)} groups to process")
 
     start_time = time.time()
@@ -687,6 +696,7 @@ async def main():
                         args.alpha,
                         args.fork_temperature,
                         args.fork_gap,
+                        args.beta,
                     )
                 )
                 all_tasks.append(task)

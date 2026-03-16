@@ -1,0 +1,150 @@
+{
+    "problem_index": 1097,
+    "final_answer": "1",
+    "duration_seconds": 3153.3350780010223,
+    "full_history": [
+        {
+            "turn": 0,
+            "attempt": 0,
+            "model": "draft",
+            "output": "Okay, so I've got this problem here about a recursive function f(i, j). It's defined in terms of modulo 5, which is interesting. The question is asking for f(2015, 2). Hmm, that's pretty far out, so I need to figure out a pattern or some kind of recursive relation that I can use.\n\nFirst, let me try to understand how the function f is defined. It's given recursively, which means its definition depends on smaller instances of itself. The function f is defined for non-negative integers i and j, where j is between 0 and 4. The base case is when i=0, and then f(0, j) is just mod_5(j + 1). So for i=0, it's straightforward.\n\nLet me write down the cases again to make sure I get it:\n\n1. If i = 0 and 0 \u2264 j \u2264 4, then f(0, j) = mod_5(j + 1).\n2. If i \u2265 1 and j = 0, then f(i, 0) = f(i - 1, 1).\n3. If i \u2265 1 and 1 \u2264 j \u2264 4, then f(i, j) = f(i - 1, f(i, j - 1)).\n\nAlright, so starting with i=0, it's simple. For i=1, it gets a bit more complicated. For example, f(1, 0) would be f(0, 1) which is mod_5(1 + 1) = 2. Then f(1, 1) would be f(0, f(1, 0)) which is f(0, 2) = mod_5(2 + 1) = 3. Similarly, f(1, 2) would be f(0, f(1, 1)) which is f(0, 3) = 4. f(1, 3) would be f(0, f(1, 2)) = f(0, 4) = 0. And f(1, 4) would be f(0, f(1, 3)) = f(0, 0) = 1.\n\nWait a minute, so for i=1, the function seems to produce the sequence 2, ",
+            "ppl": 1.2661605656193824,
+            "percentile": 0.755,
+            "accepted": false
+        },
+        {
+            "turn": 0,
+            "attempt": 1,
+            "model": "draft",
+            "output": "Okay, so I have this problem where I need to find f(2015, 2) based on a recursively defined function. Let me try to understand how this function works step by step.\n\nFirst, the function f is defined recursively with three cases. Let me write them down again:\n\n1. If i = 0 and j is between 0 and 4, then f(i, j) = mod5(j + 1). So, for i=0, it's just the remainder when j+1 is divided by 5.\n\n2. If i \u2265 1 and j = 0, then f(i, 0) = f(i - 1, 1). So, when j is 0, we reduce i by 1 and set j to 1.\n\n3. If i \u2265 1 and j is between 1 and 4, then f(i, j) = f(i - 1, f(i, j - 1)). So, for j from 1 to 4, it's a nested recursion where we first compute f(i, j - 1) and then use that result as the new j in f(i - 1, ...).\n\nOur goal is to compute f(2015, 2). That's a pretty large i, so there must be some pattern or cycle that repeats every so often. Let me try to compute some small cases to see if I can spot a pattern.\n\nStarting with i=0:\n\nf(0, 0) = mod5(0 + 1) = 1\nf(0, 1) = mod5(1 + 1) = 2\nf(0, 2) = mod5(2 + 1) = 3\nf(0, 3) = mod5(3 + 1) = 4\nf(0, 4) = mod5(4 + 1) = 0\n\nSo, for i=0, f(0, j) is just j+1 mod 5.\n\nNow, let's compute i=1:\n\nFor j=0:\nf(1, 0) = f(0, 1) = 2\n\nFor j=1:\nf(1, 1) = f(0, f(1, 0)) = f(0, 2) = 3\n\nFor j=2:\n",
+            "ppl": 1.1816983361000761,
+            "percentile": 0.451875,
+            "accepted": true
+        },
+        {
+            "turn": 1,
+            "attempt": 0,
+            "model": "draft",
+            "output": "Alright, so I need to figure out f(2015, 2) using the given recursive function. Let me try to compute some small cases first to see if there's a pattern or cycle that repeats. Maybe the function has a periodicity that I can exploit, especially since 2015 is a large number.\n\nStarting with i=0, as given:\n\nf(0, 0) = mod5(0 + 1) = 1\nf(0, 1) = mod5(1 + 1) = 2\nf(0, 2) = mod5(2 + 1) = 3\nf(0, 3) = mod5(3 + 1) = 4\nf(0, 4) = mod5(4 + 1) = 0\n\nSo, for i=0, it's straightforward. Now, moving on to i=1.\n\nFor i=1:\n\nf(1, 0) = f(0, 1) = 2 (from the second case)\n\nf(1, 1) = f(0, f(1, 0)) = f(0, 2) = 3 (using the third case)\n\nf(1, 2) = f(0, f(1, 1)) = f(0, 3) = 4\n\nf(1, 3) = f(0, f(1, 2)) = f(0, 4) = 0\n\nf(1, 4) = f(0, f(1, 3)) = f(0, 0) = 1\n\nWait, that's interesting. So for i=1, the function cycles through 2, 3, 4, 0, 1 as j increases from 0 to 4. Let me tabulate this:\n\ni=1:\nj=0: 2\nj=1: 3\nj=2: 4\nj=3: 0\nj=4: 1\n\nHmm, that's a cyclic shift of the mod5 function. Let me see if this pattern continues for higher i.\n\nMoving on to i=2.\n\nf(2, 0) = f(1, 1) = 3\n\nf(2, 1) = f(1, f",
+            "ppl": 1.2912472518846358,
+            "percentile": 0.816875,
+            "accepted": false
+        },
+        {
+            "turn": 1,
+            "attempt": 1,
+            "model": "draft",
+            "output": "Okay, so I need to figure out f(2015, 2). The function is defined recursively, which can get complicated, but maybe there's a pattern or cycle that repeats. Let me start by computing smaller values to see if I can spot a pattern.\n\nFirst, when i=0, it's straightforward:\n- f(0, 0) = 1\n- f(0, 1) = 2\n- f(0, 2) = 3\n- f(0, 3) = 4\n- f(0, 4) = 0\n\nNow, for i=1:\n- f(1, 0) = f(0, 1) = 2\n- f(1, 1) = f(0, f(1, 0)) = f(0, 2) = 3\n- f(1, 2) = f(0, f(1, 1)) = f(0, 3) = 4\n- f(1, 3) = f(0, f(1, 2)) = f(0, 4) = 0\n- f(1, 4) = f(0, f(1, 3)) = f(0, 0) = 1\n\nSo for i=1, the results are: 2, 3, 4, 0, 1.\n\nNow, i=2:\n- f(2, 0) = f(1, 1) = 3\n- f(2, 1) = f(1, f(2, 0)) = f(1, 3) = 0\n- f(2, 2) = f(1, f(2, 1)) = f(1, 0) = 2\n- f(2, 3) = f(1, f(2, 2)) = f(1, 2) = 4\n- f(2, 4) = f(1, f(2, 3)) = f(1, 4) = 1\n\nSo for i=2, the results are: 3, 0, 2, 4, 1.\n\nHmm, interesting. Let me do i=3:\n\n- f(3,",
+            "ppl": 1.1941778897237763,
+            "percentile": 0.495,
+            "accepted": true
+        },
+        {
+            "turn": 2,
+            "attempt": 0,
+            "model": "draft",
+            "output": "Okay, so I'm trying to figure out f(2015, 2) using this recursively defined function. The function seems a bit complicated, but maybe there's a pattern that repeats after a certain point. Let me try to compute some small values first to see if I can spot a cycle or something.\n\nStarting with i=0:\n- f(0,0) = 1\n- f(0,1) = 2\n- f(0,2) = 3\n- f(0,3) = 4\n- f(0,4) = 0\n\nSo for i=0, it's just j+1 mod 5.\n\nNow, i=1:\n- f(1,0) = f(0,1) = 2\n- f(1,1) = f(0, f(1,0)) = f(0,2) = 3\n- f(1,2) = f(0, f(1,1)) = f(0,3) = 4\n- f(1,3) = f(0, f(1,2)) = f(0,4) = 0\n- f(1,4) = f(0, f(1,3)) = f(0,0) = 1\n\nSo for i=1, the outputs are: 2, 3, 4, 0, 1.\n\nNow, i=2:\n- f(2,0) = f(1,1) = 3\n- f(2,1) = f(1, f(2,0)) = f(1,3) = 0\n- f(2,2) = f(1, f(2,1)) = f(1,0) = 2\n- f(2,3) = f(1, f(2,2)) = f(1,2) = 4\n- f(2,4) = f(1, f(2,3)) = f(1,4) = 1\n\nSo for i=2, the outputs are: 3, 0, 2, 4, 1.\n\nHmm, now i=3:\n\n- f(3,0) = f(2,1) = 0\n- f(3,",
+            "ppl": 1.1889354860585988,
+            "percentile": 0.47375,
+            "accepted": true
+        },
+        {
+            "turn": 3,
+            "attempt": 0,
+            "model": "draft",
+            "output": "Okay, so I need to find f(2015, 2) using this recursive function. The function seems a bit tricky because it's defined recursively, which can get complicated. Let me try to compute the function for smaller values first to see if there's a pattern.\n\nStarting with i=0:\n- f(0,0) = 1\n- f(0,1) = 2\n- f(0,2) = 3\n- f(0,3) = 4\n- f(0,4) = 0\n\nSo for i=0, it's straightforward: f(0,j) = (j+1) mod 5.\n\nNow, i=1:\n- f(1,0) = f(0,1) = 2\n- f(1,1) = f(0, f(1,0)) = f(0,2) = 3\n- f(1,2) = f(0, f(1,1)) = f(0,3) = 4\n- f(1,3) = f(0, f(1,2)) = f(0,4) = 0\n- f(1,4) = f(0, f(1,3)) = f(0,0) = 1\n\nSo for i=1, the outputs are 2, 3, 4, 0, 1.\n\nMoving on to i=2:\n- f(2,0) = f(1,1) = 3\n- f(2,1) = f(1, f(2,0)) = f(1,3) = 0\n- f(2,2) = f(1, f(2,1)) = f(1,0) = 2\n- f(2,3) = f(1, f(2,2)) = f(1,2) = 4\n- f(2,4) = f(1, f(2,3)) = f(1,4) = 1\n\nSo for i=2, the outputs are 3, 0, 2, 4, 1.\n\nNow, let's compute i=3:\n- f(3,0) = f(2,1) = 0\n- f",
+            "ppl": 1.1386608996758083,
+            "percentile": 0.28,
+            "accepted": true
+        },
+        {
+            "turn": 4,
+            "attempt": 0,
+            "model": "draft",
+            "output": "Alright, let's tackle this problem step by step. The goal is to find f(2015, 2) using the given recursive function. \n\nFirst, let me understand the function definition properly. The function f is defined with three cases:\n\n1. For i=0 and j between 0 and 4, f(0, j) is simply (j+1) mod 5.\n2. For i \u2265 1 and j=0, f(i, 0) is equal to f(i-1, 1).\n3. For i \u2265 1 and j between 1 and 4, f(i, j) is defined as f(i-1, f(i, j-1)). This is a nested recursion.\n\nGiven that 2015 is a large number, directly computing f(2015, 2) would be impractical. Therefore, I need to look for a pattern or cycle in the function's values that can help me determine f(2015, 2) without computing all previous values.\n\nLet me start by computing the function values for small i and j to identify any cycles or repeating patterns.\n\n**For i=0:**\n- f(0,0) = 1\n- f(0,1) = 2\n- f(0,2) = 3\n- f(0,3) = 4\n- f(0,4) = 0\n\n**For i=1:**\n- f(1,0) = f(0,1) = 2\n- f(1,1) = f(0, f(1,0)) = f(0,2) = 3\n- f(1,2) = f(0, f(1,1)) = f(0,3) = 4\n- f(1,3) = f(0, f(1,2)) = f(0,4) = 0\n- f(1,4) = f(0, f(1,3)) = f(0,0) = 1\n\nSo, for i=1, the results are: 2, 3, 4, 0, 1.\n\n**For i=2:**\n- f(2,0) = f(1,1) = 3\n- f(2,1) = f(1,",
+            "ppl": 1.1699950068198242,
+            "percentile": 0.4125,
+            "accepted": true
+        },
+        {
+            "turn": 5,
+            "attempt": 0,
+            "model": "draft",
+            "output": "Alright, so I'm trying to figure out f(2015, 2) using this recursive function. The function f is defined in three cases, which can get a bit complicated, but maybe there's a pattern or cycle that repeats every so often. Let's start by computing some smaller values to see if we can spot a pattern.\n\nStarting with i=0:\n- f(0,0) = 1 (since (0+1) mod 5 is 1)\n- f(0,1) = 2\n- f(0,2) = 3\n- f(0,3) = 4\n- f(0,4) = 0 (since (4+1) mod 5 is 0)\n\nSo for i=0, it's straightforward: f(0,j) = (j+1) mod 5.\n\nNow, moving on to i=1:\n- f(1,0) = f(0,1) = 2\n- f(1,1) = f(0, f(1,0)) = f(0,2) = 3\n- f(1,2) = f(0, f(1,1)) = f(0,3) = 4\n- f(1,3) = f(0, f(1,2)) = f(0,4) = 0\n- f(1,4) = f(0, f(1,3)) = f(0,0) = 1\n\nSo for i=1, the outputs are: 2, 3, 4, 0, 1.\n\nNext, let's compute for i=2:\n- f(2,0) = f(1,1) = 3\n- f(2,1) = f(1, f(2,0)) = f(1,3) = 0\n- f(2,2) = f(1, f(2,1)) = f(1,0) = 2\n- f(2,3) = f(1, f(2,2)) = f(1,2) = 4\n- f(2,4) = f(1, f(2,3)) = f(1,4) = 1\n\nSo for i=2, the",
+            "ppl": 1.0993465058904899,
+            "percentile": 0.115,
+            "accepted": true
+        },
+        {
+            "turn": 6,
+            "attempt": 0,
+            "model": "draft",
+            "output": "Okay, I'm trying to figure out f(2015, 2) using the given recursive function. Let's break this down step by step.\n\nFirst, let me write out the function definition again to make sure I understand it:\n\n- f(0, j) = (j + 1) mod 5 for j = 0,1,2,3,4.\n- f(i, 0) = f(i-1, 1) for i \u2265 1.\n- f(i, j) = f(i-1, f(i, j-1)) for i \u2265 1 and j \u2265 1.\n\nSince 2015 is a large number, I need to find a pattern or a cycle in the function values to avoid computing all previous steps. Let's compute f(i, j) for small i and j to see if there's a repeating pattern.\n\nStarting with i=0:\n\n- f(0, 0) = 1\n- f(0, 1) = 2\n- f(0, 2) = 3\n- f(0, 3) = 4\n- f(0, 4) = 0\n\nSo for i=0, it's straightforward: f(0, j) = (j+1) mod 5.\n\nNow, i=1:\n\n- f(1, 0) = f(0, 1) = 2\n- f(1, 1) = f(0, f(1, 0)) = f(0, 2) = 3\n- f(1, 2) = f(0, f(1, 1)) = f(0, 3) = 4\n- f(1, 3) = f(0, f(1, 2)) = f(0, 4) = 0\n- f(1, 4) = f(0, f(1, 3)) = f(0, 0) = 1\n\nSo for i=1, the results are: 2, 3, 4, 0, 1.\n\nMoving on to i=2:\n\n- f(2, 0) = f(1, 1) = 3\n- f(2, 1) = f(1, f(2, 0))",
+            "ppl": 1.1251307407885285,
+            "percentile": 0.22,
+            "accepted": true
+        },
+        {
+            "turn": 7,
+            "attempt": 0,
+            "model": "draft",
+            "output": "Alright, let's try to figure out f(2015, 2). Since the function is defined recursively, it might help to look for patterns or cycles in the function's outputs as i increases. Let's compute some small values first.\n\nStarting with i=0:\n\n- f(0, 0) = 1\n- f(0, 1) = 2\n- f(0, 2) = 3\n- f(0, 3) = 4\n- f(0, 4) = 0\n\nSo for i=0, it's simple: f(0, j) = (j + 1) mod 5.\n\nNow, let's compute for i=1:\n\n- f(1, 0) = f(0, 1) = 2\n- f(1, 1) = f(0, f(1, 0)) = f(0, 2) = 3\n- f(1, 2) = f(0, f(1, 1)) = f(0, 3) = 4\n- f(1, 3) = f(0, f(1, 2)) = f(0, 4) = 0\n- f(1, 4) = f(0, f(1, 3)) = f(0, 0) = 1\n\nSo for i=1, the results are 2, 3, 4, 0, 1.\n\nNow, let's compute for i=2:\n\n- f(2, 0) = f(1, 1) = 3\n- f(2, 1) = f(1, f(2, 0)) = f(1, 3) = 0\n- f(2, 2) = f(1, f(2, 1)) = f(1, 0) = 2\n- f(2, 3) = f(1, f(2, 2)) = f(1, 2) = 4\n- f(2, 4) = f(1, f(2, 3)) = f(1, 4) = 1\n\nSo for i=2, the results are 3, 0, 2,",
+            "ppl": 1.0889322476895216,
+            "percentile": 0.075625,
+            "accepted": true
+        },
+        {
+            "turn": 8,
+            "attempt": 0,
+            "model": "draft",
+            "output": "Okay, I'm trying to figure out f(2015, 2) using this recursive function. Let's start by computing some small values to see if there's a pattern.\n\nFor i=0:\n- f(0,0)=1\n- f(0,1)=2\n- f(0,2)=3\n- f(0,3)=4\n- f(0,4)=0\n\nFor i=1:\n- f(1,0)=f(0,1)=2\n- f(1,1)=f(0,f(1,0))=f(0,2)=3\n- f(1,2)=f(0,f(1,1))=f(0,3)=4\n- f(1,3)=f(0,f(1,2))=f(0,4)=0\n- f(1,4)=f(0,f(1,3))=f(0,0)=1\n\nSo for i=1, the results are: 2,3,4,0,1.\n\nNow for i=2:\n- f(2,0)=f(1,1)=3\n- f(2,1)=f(1,f(2,0))=f(1,3)=0\n- f(2,2)=f(1,f(2,1))=f(1,0)=2\n- f(2,3)=f(1,f(2,2))=f(1,2)=4\n- f(2,4)=f(1,f(2,3))=f(1,4)=1\n\nSo for i=2, the results are: 3,0,2,4,1.\n\nLet me compute for i=3:\n- f(3,0)=f(2,1)=0\n- f(3,1)=f(2,f(3,0))=f(2,0)=3\n- f(3,2)=f(2,f(3,1))=f(2,3)=4\n- f(3,3)=f(2,f(3,2))=f(2,4)=1\n- f(3,4)=f(2,f(3,3))=f(2,1)=0\n\nWait, that doesn't seem right",
+            "ppl": 1.0715517613442,
+            "percentile": 0.02125,
+            "accepted": true
+        },
+        {
+            "turn": 9,
+            "attempt": 0,
+            "model": "draft",
+            "output": "Alright, I'm trying to figure out f(2015, 2) using this recursive function. The function seems to have a certain pattern based on the initial computations. Let me see if I can spot a cycle or a repeating pattern in the results.\n\nFrom the earlier computations:\n\n- For i=0: 1,2,3,4,0\n- For i=1: 2,3,4,0,1\n- For i=2: 3,0,2,4,1\n- For i=3: Let's compute it step by step.\n\nComputing i=3:\n\n- f(3,0) = f(2,1) = 0\n- f(3,1) = f(2, f(3,0)) = f(2,0) = 3\n- f(3,2) = f(2, f(3,1)) = f(2,3) = 4\n- f(3,3) = f(2, f(3,2)) = f(2,4) = 1\n- f(3,4) = f(2, f(3,3)) = f(2,1) = 0\n\nSo for i=3, the results are: 0, 3, 4, 1, 0.\n\nHmm, that's interesting. Let's go to i=4.\n\nFor i=4:\n\n- f(4,0) = f(3,1) = 3\n- f(4,1) = f(3, f(4,0)) = f(3,3) = 1\n- f(4,2) = f(3, f(4,1)) = f(3,1) = 3\n- f(4,3) = f(3, f(4,2)) = f(3,3) = 1\n- f(4,4) = f(3, f(4,3)) = f(3,1) = 3\n\nSo for i=4, the results are: 3,1,3,1,3.\n\nWait, that seems like a repeating pattern. Let me check for i=5.\n\nFor i=5:\n\n- f(5,0) = f(4,1) = 1",
+            "ppl": 1.1155515454897087,
+            "percentile": 0.174375,
+            "accepted": true
+        },
+        {
+            "turn": 10,
+            "attempt": 0,
+            "model": "draft",
+            "output": "Okay, so I'm trying to figure out f(2015, 2) using this recursive function. The function is defined in a way that for each i, the results depend on the previous i-1. Since 2015 is a large number, I suspect there might be a cycle or repeating pattern in the function's outputs as i increases. Let me try to identify that pattern by computing more values.\n\nFrom the earlier computations, I have:\n\n- i=0: 1,2,3,4,0\n- i=1: 2,3,4,0,1\n- i=2: 3,0,2,4,1\n- i=3: 0,3,4,1,0\n- i=4: 3,1,3,1,3\n- i=5: Let's compute it.\n\nComputing i=5:\n\n- f(5,0) = f(4,1) = 1\n- f(5,1) = f(4, f(5,0)) = f(4,1) = 1\n- f(5,2) = f(4, f(5,1)) = f(4,1) = 1\n- f(5,3) = f(4, f(5,2)) = f(4,1) = 1\n- f(5,4) = f(4, f(5,3)) = f(4,1) = 1\n\nSo for i=5, the results are: 1,1,1,1,1.\n\nWait a minute, that's interesting. For i=5, all j from 0 to 4 result in 1. Let me check for i=6.\n\nFor i=6:\n\n- f(6,0) = f(5,1) = 1\n- f(6,1) = f(5, f(6,0)) = f(5,1) = 1\n- Similarly, all f(6, j) will be 1.\n\nSo it seems that once i reaches 5, the function f(i, j) becomes 1 for all j. That suggests that after i=5, the function doesn't change anymore; it's always 1 for any j.\n\nWait, that can't be right because",
+            "ppl": 1.1841119824056912,
+            "percentile": 0.45625,
+            "accepted": true
+        },
+        {
+            "turn": 11,
+            "attempt": 0,
+            "model": "draft",
+            "output": "Alright, let me try to figure out f(2015, 2) using the recursive function. From the initial computations, it seems that after a certain point, the function's outputs become constant. Let me summarize the computations so far:\n\n- i=0: [1,2,3,4,0]\n- i=1: [2,3,4,0,1]\n- i=2: [3,0,2,4,1]\n- i=3: [0,3,4,1,0]\n- i=4: [3,1,3,1,3]\n- i=5: [1,1,1,1,1]\n\nFrom i=5 onwards, it seems that all f(i, j) = 1 for any j between 0 and 4. This suggests that once i reaches 5, the function stabilizes and doesn't change. Therefore, for any i \u2265 5, f(i, j) = 1 regardless of j.\n\nGiven that 2015 is much larger than 5, we can conclude that f(2015, 2) = 1.\n\nHowever, I should double-check to ensure that this stabilization is accurate. Let's compute i=6 to confirm.\n\nFor i=6:\n\n- f(6,0) = f(5,1) = 1\n- f(6,1) = f(5, f(6,0)) = f(5,1) = 1\n- Similarly, all j values for i=6 will result in 1.\n\nSo, yes, it seems that starting from i=5, all f(i, j) = 1. Therefore, f(2015, 2) = 1.\n</think>\n\nTo determine \\( f(2015, 2) \\), we analyze the recursive function and identify a pattern. After computing initial values, we observe that for \\( i \\geq 5 \\), the function stabilizes to 1 for all \\( j \\). Hence, \\( f(2015, 2) = 1 \\).\n\n\\[\n\\boxed{1}\n\\]",
+            "ppl": 1.2442268842709263,
+            "percentile": 0.0,
+            "accepted": true,
+            "accepted_reason": "answer_found"
+        }
+    ],
+    "question": "For every positive integer $n$, let $\\text{mod}_5 (n)$ be the remainder obtained when $n$ is divided by 5. Define a function $f: \\{0,1,2,3,\\dots\\} \\times \\{0,1,2,3,4\\} \\to \\{0,1,2,3,4\\}$ recursively as follows:\n\n\\[f(i,j) = \\begin{cases}\\text{mod}_5 (j+1) & \\text{ if } i = 0 \\text{ and } 0 \\le j \\le 4 \\text{,}\\\\ f(i-1,1) & \\text{ if } i \\ge 1 \\text{ and } j = 0 \\text{, and} \\\\ f(i-1, f(i,j-1)) & \\text{ if } i \\ge 1 \\text{ and } 1 \\le j \\le 4. \\end{cases}\\]What is $f(2015,2)$?",
+    "ppl_history": [
+        1.1816983361000761,
+        1.1941778897237763,
+        1.1889354860585988,
+        1.1386608996758083,
+        1.1699950068198242,
+        1.0993465058904899,
+        1.1251307407885285,
+        1.0889322476895216,
+        1.0715517613442,
+        1.1155515454897087,
+        1.1841119824056912,
+        1.2442268842709263
+    ],
+    "avg_ppl": 1.1501932738547624
+}

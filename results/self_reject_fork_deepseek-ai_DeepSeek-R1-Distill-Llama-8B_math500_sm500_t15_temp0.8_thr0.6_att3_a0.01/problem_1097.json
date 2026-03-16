@@ -1,0 +1,153 @@
+{
+    "problem_index": 1097,
+    "final_answer": "1",
+    "duration_seconds": 2237.3103601932526,
+    "full_history": [
+        {
+            "turn": 0,
+            "attempt": 0,
+            "model": "draft",
+            "output": "Alright, so I have this problem here, and it's about a function defined recursively. Hmm, recursive functions can be tricky, but let me try to unpack this step by step. \n\nFirst, let's parse the problem statement again to make sure I understand it correctly. We have a function \\( f: \\{0,1,2,3,\\dots\\} \\times \\{0,1,2,3,4\\} \\to \\{0,1,2,3,4\\} \\). The function is defined recursively with three cases:\n\n1. When \\( i = 0 \\) and \\( 0 \\leq j \\leq 4 \\), \\( f(0,j) = \\text{mod}_5(j + 1) \\). So, this is the base case. For each \\( j \\) from 0 to 4, it's just the remainder when \\( j + 1 \\) is divided by 5.\n\n2. When \\( i \\geq 1 \\) and \\( j = 0 \\), \\( f(i,0) = f(i - 1, 1) \\). So, if the second argument is 0, we look at the function with \\( i \\) decreased by 1 and the first argument set to 1.\n\n3. The general case: When \\( i \\geq 1 \\) and \\( 1 \\leq j \\leq 4 \\), \\( f(i,j) = f(i - 1, f(i,j - 1)) \\). Hmm, that's a bit more complex. For each \\( i \\) and \\( j \\), we need to compute \\( f(i,j - 1) \\) first and then use that result as the new \\( j \\) in the function \\( f(i - 1, \\cdot) \\).\n\nThe question is to find \\( f(2015, 2) \\). That's pretty far out, so I need to look for a pattern or perhaps find a closed-form expression rather than computing it step by step.\n\nLet me start by computing some small cases to see if I can spot a pattern.\n\nFirst, let's compute \\( f(0,j) \\) for \\( j = 0,1,2,3,4 \\):\n\n- \\( f(0,0) = \\text{mod}_5(0 + 1) = ",
+            "ppl": 1.2301112498629365,
+            "percentile": 0.923125,
+            "accepted": false
+        },
+        {
+            "turn": 0,
+            "attempt": 1,
+            "model": "draft",
+            "output": "Alright, so I have this problem here where I need to find f(2015, 2). The function f is defined recursively, and it's a bit intimidating at first glance, but let me try to break it down step by step.\n\nFirst, let me understand the function f. It's defined for non-negative integers i and j, where j is between 0 and 4. The function has three cases:\n\n1. If i = 0 and 0 \u2264 j \u2264 4, then f(0, j) is just mod_5(j + 1). That means if j is 0, f(0,0) is 1; j=1, f(0,1)=2; up to j=4, f(0,4)=5 mod 5 which is 0.\n\n2. If i \u2265 1 and j = 0, then f(i, 0) = f(i - 1, 1). So, for any i, when j is 0, we look at f with i decreased by 1 and j set to 1.\n\n3. If i \u2265 1 and 1 \u2264 j \u2264 4, then f(i, j) = f(i - 1, f(i, j - 1)). This is a nested recursive case, which might be a bit tricky.\n\nSo, the function f seems to build up based on previous values, especially when i is greater than 0. Since the problem is asking for f(2015, 2), which is a pretty large i, I need to figure out if there's a pattern or cycle that repeats, which would make it easier to compute without having to calculate all the previous steps.\n\nLet me start by computing some small values of f(i, j) to see if I can spot a pattern.\n\nStarting with i=0:\n- f(0,0) = mod_5(0 + 1) = 1\n- f(0,1) = mod_5(1 + 1) = 2\n- f(0,2) = mod_5(2 + 1) = 3\n- f(0,3) = mod_5(3 + 1) = 4\n- f(0,4) = mod_5(4 + 1) = 0\n\nSo, for i=0, f(0,j",
+            "ppl": 1.1800759368646396,
+            "percentile": 0.8125,
+            "accepted": false
+        },
+        {
+            "turn": 0,
+            "attempt": 2,
+            "model": "draft",
+            "output": "Okay, so I have this problem here where I need to find f(2015, 2). The function f is defined recursively, and it's a bit complicated, but I'll try to break it down step by step.\n\nFirst, let me understand the function definition properly. The function f takes two arguments, i and j, both non-negative integers. The domain of i is from 0 upwards, and j is from 0 to 4. The function is defined recursively with three cases:\n\n1. If i = 0 and j is between 0 and 4 (inclusive), then f(0, j) is just the remainder when j+1 is divided by 5. So, f(0, j) = mod5(j + 1). That part seems straightforward.\n\n2. If i is at least 1 and j is 0, then f(i, 0) = f(i - 1, 1). So, whenever the second argument is 0, we reduce i by 1 and set j to 1.\n\n3. If i is at least 1 and j is between 1 and 4, then f(i, j) = f(i - 1, f(i, j - 1)). This is a nested recursive case, which might be a bit tricky.\n\nThe goal is to compute f(2015, 2). That's a pretty large i value, so I need to find a pattern or some periodicity in the function's behavior to avoid computing each step individually.\n\nLet me start by computing some small values of f(i, j) to see if I can spot a pattern.\n\nStarting with i = 0:\n\n- f(0, 0) = mod5(0 + 1) = 1\n- f(0, 1) = mod5(1 + 1) = 2\n- f(0, 2) = mod5(2 + 1) = 3\n- f(0, 3) = mod5(3 + 1) = 4\n- f(0, 4) = mod5(4 + 1) = 0\n\nSo, for i = 0, f(0, j) cycles through 1, 2, 3, 4, 0 as j increases from 0 to 4.\n\nNow, let's compute f(1,",
+            "ppl": 1.1432001584183817,
+            "percentile": 0.635625,
+            "accepted": false
+        },
+        {
+            "turn": 0,
+            "event": "fork",
+            "forked_from": 1088,
+            "peer_score": 1.1332001584183817,
+            "my_score": Infinity,
+            "score_gap": Infinity,
+            "my_avg_ppl": Infinity,
+            "peer_avg_ppl": 1.1432001584183817,
+            "ppl_gap": Infinity,
+            "peer_turn": 1
+        },
+        {
+            "turn": 1,
+            "attempt": 0,
+            "model": "draft",
+            "output": "I need to compute f(2015, 2). Let's see if I can find a pattern or a cycle in the function f(i, j) as i increases.\n\nFirst, let's compute f(0, j) as we did before:\n\nf(0, 0) = 1\n\nf(0, 1) = 2\n\nf(0, 2) = 3\n\nf(0, 3) = 4\n\nf(0, 4) = 0\n\nNow, let's compute f(1, j) for j from 0 to 4.\n\nStarting with j=0:\n\nf(1, 0) = f(0, 1) = 2\n\nj=1:\n\nf(1, 1) = f(0, f(1, 0)) = f(0, 2) = 3\n\nj=2:\n\nf(1, 2) = f(0, f(1, 1)) = f(0, 3) = 4\n\nj=3:\n\nf(1, 3) = f(0, f(1, 2)) = f(0, 4) = 0\n\nj=4:\n\nf(1, 4) = f(0, f(1, 3)) = f(0, 0) = 1\n\nSo, f(1, j) for j=0 to 4 is 2, 3, 4, 0, 1.\n\nWait, that's interesting. It's a cyclic shift of f(0, j). Let me see if this pattern continues for higher i.\n\nNow, let's compute f(2, j) for j=0 to 4.\n\nj=0:\n\nf(2, 0) = f(1, 1) = 3\n\nj=1:\n\nf(2, 1) = f(1, f(2, 0)) = f(1, 3) = 0\n\nj=2:\n\nf(2, 2) = f(1, f(2, 1)) = f(1, 0) = 2\n\nj=3:\n\nf(2, 3) = f(1, f(2, 2)) = f(1, 2) = 4\n\nj",
+            "ppl": 1.0957450917451894,
+            "percentile": 0.309375,
+            "accepted": true
+        },
+        {
+            "turn": 2,
+            "attempt": 0,
+            "model": "draft",
+            "output": "=4:\n\nf(2, 4) = f(1, f(2, 3)) = f(1, 4) = 1\n\nSo, f(2, j) is 3, 0, 2, 4, 1.\n\nHmm, that's another cyclic shift. Let me see if this continues.\n\nNow, f(3, j):\n\nj=0:\n\nf(3, 0) = f(2, 1) = 0\n\nj=1:\n\nf(3, 1) = f(2, f(3, 0)) = f(2, 0) = 3\n\nj=2:\n\nf(3, 2) = f(2, f(3, 1)) = f(2, 3) = 4\n\nj=3:\n\nf(3, 3) = f(2, f(3, 2)) = f(2, 4) = 1\n\nj=4:\n\nf(3, 4) = f(2, f(3, 3)) = f(2, 1) = 0\n\nWait, that doesn't seem to fit the pattern. Let me check my calculations again.\n\nWait, f(3, 0) = f(2, 1) = 0.\n\nf(3, 1) = f(2, f(3, 0)) = f(2, 0) = 3.\n\nf(3, 2) = f(2, f(3, 1)) = f(2, 3) = 4.\n\nf(3, 3) = f(2, f(3, 2)) = f(2, 4) = 1.\n\nf(3, 4) = f(2, f(3, 3)) = f(2, 1) = 0.\n\nWait, so f(3, j) is 0, 3, 4, 1, 0.\n\nHmm, that's a bit different. Let me see if I made a mistake.\n\nWait, perhaps I should compute f(3, 4) again.\n\nf(3, 4) = f(2, f(3, 3)).\n\nf(3, 3) is 1, so f(2,",
+            "ppl": 1.1055958017063992,
+            "percentile": 0.35625,
+            "accepted": true
+        },
+        {
+            "turn": 3,
+            "attempt": 0,
+            "model": "draft",
+            "output": " 1) is 0. So yes, f(3, 4) is 0.\n\nSo, f(3, j) is 0, 3, 4, 1, 0.\n\nHmm, that's a bit different from the previous pattern. Let me see if this continues for f(4, j).\n\nCompute f(4, j):\n\nj=0:\n\nf(4, 0) = f(3, 1) = 3\n\nj=1:\n\nf(4, 1) = f(3, f(4, 0)) = f(3, 3) = 1\n\nj=2:\n\nf(4, 2) = f(3, f(4, 1)) = f(3, 1) = 3\n\nj=3:\n\nf(4, 3) = f(3, f(4, 2)) = f(3, 3) = 1\n\nj=4:\n\nf(4, 4) = f(3, f(4, 3)) = f(3, 1) = 3\n\nWait, that seems inconsistent. Let me check each step again.\n\nf(4, 0) = f(3, 1) = 3.\n\nf(4, 1) = f(3, f(4, 0)) = f(3, 3) = 1.\n\nf(4, 2) = f(3, f(4, 1)) = f(3, 1) = 3.\n\nf(4, 3) = f(3, f(4, 2)) = f(3, 3) = 1.\n\nf(4, 4) = f(3, f(4, 3)) = f(3, 1) = 3.\n\nSo, f(4, j) is 3, 1, 3, 1, 3.\n\nHmm, that's a different pattern. It alternates between 3 and 1 for j=1,2,3,4.\n\nWait, maybe I made a mistake in computing f(3, j). Let me check f(3, j) again.\n\nf(3, 0) = f(2, 1) = 0.\n\nf(3, 1)",
+            "ppl": 1.1078474626024652,
+            "percentile": 0.385625,
+            "accepted": true
+        },
+        {
+            "turn": 4,
+            "attempt": 0,
+            "model": "draft",
+            "output": " = f(2, f(3, 0)) = f(2, 0) = 3.\n\nf(3, 2) = f(2, f(3, 1)) = f(2, 3) = 4.\n\nf(3, 3) = f(2, f(3, 2)) = f(2, 4) = 1.\n\nf(3, 4) = f(2, f(3, 3)) = f(2, 1) = 0.\n\nSo, f(3, j) is 0, 3, 4, 1, 0.\n\nWait, that's correct. So, f(3, j) is 0,3,4,1,0.\n\nNow, f(4, j) is 3,1,3,1,3.\n\nHmm, perhaps the pattern is not as straightforward as I thought. Let me try f(5, j).\n\nCompute f(5, j):\n\nj=0:\n\nf(5, 0) = f(4, 1) = 1.\n\nj=1:\n\nf(5, 1) = f(4, f(5, 0)) = f(4, 1) = 1.\n\nj=2:\n\nf(5, 2) = f(4, f(5, 1)) = f(4, 1) = 1.\n\nj=3:\n\nf(5, 3) = f(4, f(5, 2)) = f(4, 1) = 1.\n\nj=4:\n\nf(5, 4) = f(4, f(5, 3)) = f(4, 1) = 1.\n\nWait, so f(5, j) is 1,1,1,1,1 for j=0 to 4.\n\nThat's interesting. So, for i=5, all j from 0 to 4 give f(5, j)=1.\n\nWait, maybe this is a fixed point. Let me check f(5, j) again.\n\nf(5, 0) = f(4, 1) = 1.\n\nf(5, 1) = f(4, f(5, 0)) = f(4, 1",
+            "ppl": 1.118764777109699,
+            "percentile": 0.44875,
+            "accepted": true
+        },
+        {
+            "turn": 5,
+            "attempt": 0,
+            "model": "draft",
+            "output": ") = 1.\n\nSimilarly, for j=2,3,4, it's the same. So, yes, f(5, j)=1 for all j.\n\nHmm, so perhaps for i >=5, f(i, j) =1 for all j.\n\nWait, let me check f(6, j):\n\nf(6, 0) = f(5, 1) =1.\n\nf(6, 1) = f(5, f(6, 0)) = f(5,1)=1.\n\nSimilarly, f(6, j)=1 for all j.\n\nSo, it seems that once i reaches 5, f(i, j) becomes 1 for all j.\n\nWait, that's a big revelation. So, for i >=5, f(i, j)=1 for any j between 0 and 4.\n\nIf that's the case, then f(2015, 2) would be 1, since 2015 is much larger than 5.\n\nBut let me make sure this pattern holds. Let me compute f(5, j) again.\n\nf(5, 0) = f(4,1) =1.\n\nf(5,1) = f(4, f(5,0)) = f(4,1)=1.\n\nf(5,2) = f(4, f(5,1)) = f(4,1)=1.\n\nSame for j=3,4.\n\nSo, yes, f(5, j)=1 for all j.\n\nSimilarly, f(6, j) = f(5, f(6, j-1)).\n\nBut since f(5, anything)=1, then f(6, j)=f(5,1)=1.\n\nSo, yes, for i >=5, f(i, j)=1 for any j.\n\nTherefore, f(2015,2)=1.\n\nWait, but let me check f(4, j) again to make sure I didn't make a mistake earlier.\n\nf(4,0)=f(3,1)=3.\n\nf(4,1)=f(3, f(4,0))=f(3,3)=1.\n\nf(4,2)=f(3, f(4,1))=f(3,1)=3.\n\nf(4,3)=f(3, f(",
+            "ppl": 1.2200890840168874,
+            "percentile": 0.896875,
+            "accepted": false
+        },
+        {
+            "turn": 5,
+            "attempt": 1,
+            "model": "draft",
+            "output": ") = 1.\n\nSimilarly, for j=2,3,4, it's the same. So, yes, f(5, j)=1 for all j.\n\nHmm, so perhaps for i >=5, f(i, j) =1 for all j.\n\nWait, let me check f(6, j):\n\nf(6, 0) = f(5, 1) =1.\n\nf(6, 1) = f(5, f(6, 0)) = f(5,1)=1.\n\nSimilarly, f(6, j)=1 for all j.\n\nSo, it seems that once i reaches 5, f(i, j) becomes 1 for all j.\n\nWait, that's a big revelation. So, for i >=5, f(i, j)=1 for any j between 0 and 4.\n\nIf that's the case, then f(2015, 2) would be 1, since 2015 is much larger than 5.\n\nBut let me make sure this pattern holds. Let me compute f(5, j) again.\n\nf(5, 0) = f(4,1) =1.\n\nf(5,1) = f(4, f(5,0)) = f(4,1)=1.\n\nf(5,2) = f(4, f(5,1)) = f(4,1)=1.\n\nSimilarly, f(5,3)=1, f(5,4)=1.\n\nSo, yes, f(5, j)=1 for all j.\n\nSimilarly, f(6, j) = f(5, f(6, j-1)).\n\nBut since f(5, anything)=1, then f(6, j)=f(5,1)=1.\n\nSo, yes, for any i >=5, f(i, j)=1.\n\nTherefore, f(2015,2)=1.\n\nWait, but let me check f(4, j) again to make sure I didn't make a mistake earlier.\n\nf(4,0)=f(3,1)=3.\n\nf(4,1)=f(3, f(4,0))=f(3,3)=1.\n\nf(4,2)=f(3, f(4,1))=f(3,1)=3.\n\nf(4,",
+            "ppl": 1.2192723398741572,
+            "percentile": 0.896875,
+            "accepted": false
+        },
+        {
+            "turn": 5,
+            "attempt": 2,
+            "model": "draft",
+            "output": ") = 1.\n\nSimilarly, for j=2,3,4, it's the same. So, yes, f(5, j)=1 for all j.\n\nHmm, so perhaps for i >=5, f(i, j) =1 for all j.\n\nWait, let me check f(6, j):\n\nf(6, 0) = f(5, 1) =1.\n\nf(6, 1) = f(5, f(6, 0)) = f(5,1)=1.\n\nSimilarly, f(6, j)=1 for all j.\n\nSo, it seems that once i reaches 5, f(i, j) becomes 1 for all j.\n\nWait, that's a big revelation. So, for i >=5, f(i, j)=1 for any j between 0 and 4.\n\nIf that's the case, then f(2015, 2) would be 1, since 2015 is much larger than 5.\n\nBut let me make sure this pattern holds. Let me compute f(5, j) again.\n\nf(5, 0) = f(4,1)=1.\n\nf(5,1)=f(4, f(5,0))=f(4,1)=1.\n\nf(5,2)=f(4, f(5,1))=f(4,1)=1.\n\nSame for j=3 and 4. So, yes, f(5, j)=1 for all j.\n\nSimilarly, f(6, j)=f(5, f(6, j-1))=f(5,1)=1, since f(6, j-1)=1.\n\nSo, this seems to hold. Therefore, for any i >=5, f(i, j)=1 for all j.\n\nTherefore, f(2015,2)=1.\n\nWait, but let me check f(4, j) again to make sure I didn't make a mistake earlier.\n\nf(4,0)=f(3,1)=3.\n\nf(4,1)=f(3, f(4,0))=f(3,3)=1.\n\nf(4,2)=f(3, f(4,1))=f(3,1)=3.\n\nf(4,3)=f(3, f(4,2",
+            "ppl": 1.2137229737365063,
+            "percentile": 0.8825,
+            "accepted": false
+        },
+        {
+            "turn": 6,
+            "attempt": 0,
+            "model": "draft",
+            "output": "))=f(3,3)=1.\n\nf(4,4)=f(3, f(4,3))=f(3,1)=3.\n\nSo, f(4, j) is 3,1,3,1,3.\n\nThen, f(5,0)=f(4,1)=1.\n\nf(5,1)=f(4, f(5,0))=f(4,1)=1.\n\nSimilarly, f(5,2)=f(4, f(5,1))=f(4,1)=1.\n\nSo, yes, f(5, j)=1 for all j.\n\nTherefore, for any i >=5, f(i, j)=1 for all j.\n\nThus, f(2015,2)=1.\n\nI think that's the answer. Let me just recap to make sure I didn't miss anything.\n\nThe function f seems to stabilize at 1 for all j once i reaches 5. So, regardless of how large i is, as long as it's 5 or more, f(i, j) will be 1 for any j from 0 to 4.\n\nTherefore, f(2015,2)=1.\n</think>\n\nTo solve the problem, we analyze the function \\( f(i, j) \\) step by step and identify a pattern that stabilizes for large \\( i \\).\n\n1. **Base Case (i = 0):**\n   \\[\n   f(0, j) = \\text{mod}_5(j + 1)\n   \\]\n   This results in \\( f(0, j) = 1, 2, 3, 4, 0 \\) for \\( j = 0, 1, 2, 3, 4 \\) respectively.\n\n2. **Compute f(1, j):**\n   - \\( f(1, 0) = f(0, 1) = 2 \\)\n   - \\( f(1, 1) = f(0, f(1, 0)) = f(0, 2) = 3 \\)\n   - \\( f(1, 2) = f(0, f(1, 1)) = f(0, 3) = 4 \\)\n   - \\( f(1, 3) = f(0, f(1, ",
+            "ppl": 1.126000555144851,
+            "percentile": 0.5075,
+            "accepted": true
+        },
+        {
+            "turn": 7,
+            "attempt": 0,
+            "model": "draft",
+            "output": "2)) = f(0, 4) = 0 \\)\n   - \\( f(1, 4) = f(0, f(1, 3)) = f(0, 0) = 1 \\)\n   Thus, \\( f(1, j) = 2, 3, 4, 0, 1 \\).\n\n3. **Compute f(2, j):**\n   - \\( f(2, 0) = f(1, 1) = 3 \\)\n   - \\( f(2, 1) = f(1, f(2, 0)) = f(1, 3) = 0 \\)\n   - \\( f(2, 2) = f(1, f(2, 1)) = f(1, 0) = 2 \\)\n   - \\( f(2, 3) = f(1, f(2, 2)) = f(1, 2) = 4 \\)\n   - \\( f(2, 4) = f(1, f(2, 3)) = f(1, 4) = 1 \\)\n   Thus, \\( f(2, j) = 3, 0, 2, 4, 1 \\).\n\n4. **Compute f(3, j):**\n   - \\( f(3, 0) = f(2, 1) = 0 \\)\n   - \\( f(3, 1) = f(2, f(3, 0)) = f(2, 0) = 3 \\)\n   - \\( f(3, 2) = f(2, f(3, 1)) = f(2, 3) = 4 \\)\n   - \\( f(3, 3) = f(2, f(3, 2)) = f(2, 4) = 1 \\)\n   - \\( f(3, 4) = f(2, f(3, 3)) = f(2, 1) = 0 \\)\n   Thus, \\( f(3, j) = 0, 3, 4, 1, 0 \\).\n\n5. **Compute f(4, j):**\n   - \\( f(4, 0)",
+            "ppl": 1.0030431485045037,
+            "percentile": 0.0,
+            "accepted": true
+        },
+        {
+            "turn": 8,
+            "attempt": 0,
+            "model": "draft",
+            "output": " = f(3, 1) = 3 \\)\n   - \\( f(4, 1) = f(3, f(4, 0)) = f(3, 3) = 1 \\)\n   - \\( f(4, 2) = f(3, f(4, 1)) = f(3, 1) = 3 \\)\n   - \\( f(4, 3) = f(3, f(4, 2)) = f(3, 3) = 1 \\)\n   - \\( f(4, 4) = f(3, f(4, 3)) = f(3, 1) = 3 \\)\n   Thus, \\( f(4, j) = 3, 1, 3, 1, 3 \\).\n\n6. **Compute f(5, j):**\n   - \\( f(5, 0) = f(4, 1) = 1 \\)\n   - \\( f(5, 1) = f(4, f(5, 0)) = f(4, 1) = 1 \\)\n   - \\( f(5, 2) = f(4, f(5, 1)) = f(4, 1) = 1 \\)\n   - \\( f(5, 3) = f(4, f(5, 2)) = f(4, 1) = 1 \\)\n   - \\( f(5, 4) = f(4, f(5, 3)) = f(4, 1) = 1 \\)\n   Thus, \\( f(5, j) = 1 \\) for all \\( j \\).\n\n7. **Generalization for \\( i \\geq 5 \\):**\n   For \\( i \\geq 5 \\), \\( f(i, j) = 1 \\) for all \\( j \\) because each recursive call reduces \\( i \\) until it reaches 5, where \\( f(5, j) = 1 \\).\n\nTherefore, \\( f(2015, 2) = 1 \\).\n\n\\[\n\\boxed{1}\n\\]",
+            "ppl": 1.0273300852216662,
+            "percentile": 0.0,
+            "accepted": true,
+            "accepted_reason": "answer_found"
+        }
+    ],
+    "question": "For every positive integer $n$, let $\\text{mod}_5 (n)$ be the remainder obtained when $n$ is divided by 5. Define a function $f: \\{0,1,2,3,\\dots\\} \\times \\{0,1,2,3,4\\} \\to \\{0,1,2,3,4\\}$ recursively as follows:\n\n\\[f(i,j) = \\begin{cases}\\text{mod}_5 (j+1) & \\text{ if } i = 0 \\text{ and } 0 \\le j \\le 4 \\text{,}\\\\ f(i-1,1) & \\text{ if } i \\ge 1 \\text{ and } j = 0 \\text{, and} \\\\ f(i-1, f(i,j-1)) & \\text{ if } i \\ge 1 \\text{ and } 1 \\le j \\le 4. \\end{cases}\\]What is $f(2015,2)$?",
+    "ppl_history": [
+        1.1432001584183817,
+        1.1432001584183817,
+        1.1432001584183817,
+        1.1432001584183817,
+        1.0957450917451894,
+        1.1055958017063992,
+        1.1078474626024652,
+        1.118764777109699,
+        1.2137229737365063,
+        1.126000555144851,
+        1.0030431485045037,
+        1.0273300852216662
+    ],
+    "avg_ppl": 1.1142375441204007
+}

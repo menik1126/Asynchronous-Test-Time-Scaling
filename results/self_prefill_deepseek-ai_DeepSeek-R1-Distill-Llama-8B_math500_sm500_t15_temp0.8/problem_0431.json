@@ -1,0 +1,116 @@
+{
+    "problem_index": 431,
+    "final_answer": "850",
+    "duration_seconds": 55.7682101726532,
+    "full_history": [
+        {
+            "turn": 0,
+            "model": "draft",
+            "output": "Okay, so I need to solve this equation: \n\n\\[x^{10} + (13x - 1)^{10} = 0\\]\n\nand find the value of \n\n\\[\\frac{1}{r_1\\overline{r_1}} + \\frac{1}{r_2\\overline{r_2}} + \\dots + \\frac{1}{r_5\\overline{r_5}}.\\]\n\nFirst, I remember that for any complex number \\( r \\), \\( r\\overline{r} = |r|^2 \\). So, \\( \\frac{1}{r\\overline{r}} = \\frac{1}{|r|^2} \\). Therefore, the expression we're supposed to find is the sum of the reciprocals of the squared magnitudes of each pair of complex conjugate roots.\n\nSince the equation is a polynomial of degree 10, it has 10 roots. These roots come in conjugate pairs: \\( r_1, \\overline{r_1}, r_2, \\overline{r_2}, \\) and so on up to \\( r_5, \\overline{r_5} \\).\n\nSo, the sum we need is:\n\n\\[\\sum_{i=1}^{5} \\frac{1}{|r_i|^2}.\\]\n\nHmm, how do I relate this to the given polynomial?\n\nI remember that for a polynomial \\( P(x) = a_{10}x^{10} + \\dots + a_0 \\), the sum of the roots is \\( -\\frac{a_9}{a_{10}} \\), and the sum of the products of the roots taken two at a time is \\( \\frac{a_8}{a_{10}} \\), and so on.\n\nBut in this case, we aren't dealing directly with the roots, but with their magnitudes squared. Maybe I need to find a way to express \\( |r_i|^2 \\) in terms of the roots or coefficients.\n\nWait, another thought: Let me consider substituting \\( x = 0 \\) into the equation. If I plug in \\( x = 0 \\), the first term becomes \\( 0^{10} = 0 \\), and the second term becomes \\( (-1)^{10} = 1 \\). So, \\( 0 + 1 = 1"
+        },
+        {
+            "turn": 0,
+            "model": "self_ppl",
+            "ppl": 1.3186008712122046,
+            "percentile": 0.99375
+        },
+        {
+            "turn": 0,
+            "model": "self_continue",
+            "output": " \\neq 0 \\). So, \\( x = 0 \\) is not a root.\n\nAlternatively, maybe I can factor the equation or make a substitution to simplify it.\n\nLooking at the equation:\n\n\\[x^{10} + (13x - 1)^{10} = 0.\\]\n\nLet me set \\( y = 13x - 1 \\). Then, \\( x = \\frac{y + 1}{13} \\). Substituting back into the equation:\n\n\\[\\left( \\frac{y + 1}{13} \\right)^{10} + y^{10} = 0.\\]\n\nHmm, that might not be immediately helpful. Alternatively, maybe I can write the equation as:\n\n\\[x^{10} = - (13x - 1)^{10}.\\]\n\nTaking the 10th root on both sides, we get:\n\n\\[x = \\omega (13x - 1),\\]\n\nwhere \\( \\omega \\) is a 10th root of -1. Wait, but -1 is just \\( e^{i\\pi} \\), so the 10th roots of -1 would be \\( e^{i\\pi(2k + 1)/10} \\) for \\( k = 0, 1, ..., 9 \\).\n\nSo, each root \\( r_i \\) satisfies:\n\n\\[r_i = \\omega_i (13 r_i - 1),\\]\n\nwhere \\( \\omega_i \\) is a 10th root of -1.\n\nLet me rearrange this equation:\n\n\\[r_i = 13 \\omega_i r_i - \\omega_i.\\]\n\nBring all terms to one side:\n\n\\[r_i - 13 \\omega_i r_i = -\\omega_i.\\]\n\nFactor out \\( r_i \\):\n\n\\[r_i (1 - 13 \\omega_i) = -\\omega_i.\\]\n\nTherefore,\n\n\\[r_i = \\frac{ -\\omega_i }{1 - 13 \\omega_i }.\\]\n\nHmm, that's interesting. So each root \\( r_i \\) can be expressed in terms of a 10th root of -1.\n\nBut I need to find \\( \\frac{1}{|r_i|^2} \\). Let me compute \\( |r_i|^2 \\).\n\nGiven \\( r_i = \\frac{ -\\omega_i }{1 - 13 \\omega_i } \\),"
+        },
+        {
+            "turn": 1,
+            "model": "draft",
+            "output": " then:\n\n\\[ |r_i|^2 = \\left| \\frac{ -\\omega_i }{1 - 13 \\omega_i } \\right|^2 = \\frac{ | \\omega_i |^2 }{ |1 - 13 \\omega_i |^2 }.\\]\n\nSince \\( | \\omega_i | = 1 \\) (because they are roots of unity), this simplifies to:\n\n\\[ |r_i|^2 = \\frac{1}{|1 - 13 \\omega_i |^2}.\\]\n\nTherefore,\n\n\\[ \\frac{1}{|r_i|^2} = |1 - 13 \\omega_i |^2.\\]\n\nSo, the sum we need is:\n\n\\[ \\sum_{i=1}^{5} |1 - 13 \\omega_i |^2. \\]\n\nWait, but \\( \\omega_i \\) are the 10th roots of -1. Let me figure out what these roots are.\n\nThe 10th roots of -1 can be written as:\n\n\\[ \\omega_k = e^{i\\pi(2k + 1)/10} \\quad \\text{for} \\quad k = 0, 1, 2, \\dots, 9. \\]\n\nSo, they are equally spaced around the unit circle, starting at angle \\( \\pi/10 \\) and each subsequent root is \\( \\pi/5 \\) radians apart.\n\nBut since we have 10 roots, and we're summing over 5 pairs, each pair corresponds to \\( \\omega \\) and \\( -\\omega \\), because complex conjugation pairs.\n\nWait, actually, for each \\( \\omega_k \\), its complex conjugate is \\( \\omega_{10 - k - 1} \\), but since the roots are symmetric, each pair \\( \\omega_k \\) and \\( \\omega_{10 - k} \\) are complex conjugates.\n\nWait, actually, let me think: The roots of -1 are at angles \\( \\pi/10, 3\\pi/10, 5\\pi/10, ..., 19\\pi/10 \\). So, the complex conjugate of \\( \\omega_k \\) is \\( \\omega_{10 - k} \\), because the angle becomes \\( -\\theta \\) when taking conjugate.\n\nBut since the roots are symmetric, each pair \\( \\omega_k \\) and \\( \\omega"
+        },
+        {
+            "turn": 1,
+            "model": "self_ppl",
+            "ppl": 1.2325093687484443,
+            "percentile": 0.93125
+        },
+        {
+            "turn": 1,
+            "model": "self_continue",
+            "output": "_{10 - k} \\) are conjugates.\n\nTherefore, when we sum over all 10 roots, we can group them into 5 pairs of complex conjugates. So, the sum \\( \\sum_{i=1}^{10} |1 - 13 \\omega_i |^2 \\) would be twice the sum we need, because each pair contributes the same amount.\n\nWait, but in our case, we have 5 terms, each corresponding to a pair. So, the sum we need is:\n\n\\[ \\sum_{i=1}^{5} |1 - 13 \\omega_i |^2 = \\frac{1}{2} \\sum_{k=0}^{9} |1 - 13 \\omega_k |^2. \\]\n\nSo, if I can compute the sum over all 10 roots and then divide by 2, I can get the desired sum.\n\nSo, let's compute \\( S = \\sum_{k=0}^{9} |1 - 13 \\omega_k |^2 \\).\n\nRecall that for any complex number \\( z \\), \\( |z|^2 = z \\overline{z} \\). So,\n\n\\[ |1 - 13 \\omega_k |^2 = (1 - 13 \\omega_k)(1 - 13 \\overline{\\omega_k}) \\]\n\nSince \\( \\omega_k \\) are roots of -1, their conjugates are also roots of -1, specifically \\( \\overline{\\omega_k} = \\omega_{10 - k} \\).\n\nTherefore,\n\n\\[ |1 - 13 \\omega_k |^2 = (1 - 13 \\omega_k)(1 - 13 \\omega_{10 - k}) \\]\n\nExpanding this:\n\n\\[ (1)(1) + (1)(-13 \\omega_{10 - k}) + (-13 \\omega_k)(1) + (-13 \\omega_k)(-13 \\omega_{10 - k}) \\]\n\nSimplify:\n\n\\[ 1 - 13 \\omega_{10 - k} - 13 \\omega_k + 169 \\omega_k \\omega_{10 - k} \\]\n\nSo, the sum S becomes:\n\n\\[ S = \\sum_{k=0}^{9} \\left[ 1 - 13 \\omega_{10 - k} - 13 \\omega_k + 169 \\omega_k \\omega_{10 - k"
+        },
+        {
+            "turn": 2,
+            "model": "draft",
+            "output": "} \\right] \\]\n\nLet me reindex the sum. Let me set \\( m = 10 - k \\). When \\( k = 0 \\), \\( m = 10 \\), but since we're mod 10, \\( m = 0 \\). Similarly, when \\( k = 9 \\), \\( m = 1 \\). So, the sum becomes:\n\n\\[ S = \\sum_{m=0}^{9} \\left[ 1 - 13 \\omega_m - 13 \\omega_{10 - m} + 169 \\omega_{10 - m} \\omega_m \\right] \\]\n\nWait, but this is the same as the original sum, so perhaps I can pair terms.\n\nAlternatively, let's consider that for each \\( k \\), \\( \\omega_{10 - k} = \\overline{\\omega_k} \\). So, \\( \\omega_{10 - k} = \\overline{\\omega_k} \\).\n\nTherefore, the term \\( -13 \\omega_{10 - k} -13 \\omega_k \\) becomes \\( -13 (\\omega_k + \\overline{\\omega_k}) = -26 \\text{Re}(\\omega_k) \\).\n\nSimilarly, \\( \\omega_k \\omega_{10 - k} = \\omega_k \\overline{\\omega_k} = | \\omega_k |^2 = 1 \\).\n\nSo, substituting back into S:\n\n\\[ S = \\sum_{k=0}^{9} \\left[ 1 - 26 \\text{Re}(\\omega_k) + 169 \\times 1 \\right] \\]\n\nSimplify:\n\n\\[ S = \\sum_{k=0}^{9} \\left[ 1 + 169 - 26 \\text{Re}(\\omega_k) \\right] = \\sum_{k=0}^{9} (170 - 26 \\text{Re}(\\omega_k)) \\]\n\nSo,\n\n\\[ S = 10 \\times 170 - 26 \\sum_{k=0}^{9} \\text{Re}(\\omega_k) \\]\n\nCompute \\( 10 \\times 170 = 1700 \\).\n\nNow, we need to compute \\( \\sum_{k=0}^{9} \\text{Re}(\\omega_k) \\).\n\nEach \\( \\omega_k = e^{i\\theta_k} \\) where \\( \\theta_k ="
+        },
+        {
+            "turn": 2,
+            "model": "self_ppl",
+            "ppl": 1.1414314377086983,
+            "percentile": 0.626875
+        },
+        {
+            "turn": 2,
+            "model": "self_continue",
+            "output": " \\frac{(2k + 1)\\pi}{10} \\).\n\nSo, \\( \\text{Re}(\\omega_k) = \\cos\\left( \\frac{(2k + 1)\\pi}{10} \\right) \\).\n\nTherefore, the sum is:\n\n\\[ \\sum_{k=0}^{9} \\cos\\left( \\frac{(2k + 1)\\pi}{10} \\right) \\]\n\nI recall that the sum of cosines of equally spaced angles around the unit circle can be computed using certain trigonometric identities.\n\nSpecifically, for angles \\( \\theta, 3\\theta, 5\\theta, ..., (2n - 1)\\theta \\), the sum of cosines can be expressed as:\n\n\\[ \\sum_{k=0}^{n - 1} \\cos((2k + 1)\\theta) = \\frac{\\sin(2n \\theta)}{2 \\sin \\theta} \\]\n\nIn our case, \\( n = 5 \\) and \\( \\theta = \\frac{\\pi}{10} \\).\n\nSo, plugging in:\n\n\\[ \\sum_{k=0}^{4} \\cos\\left( (2k + 1)\\frac{\\pi}{10} \\right) = \\frac{\\sin(10 \\times \\frac{\\pi}{10})}{2 \\sin(\\frac{\\pi}{10})} = \\frac{\\sin(\\pi)}{2 \\sin(\\frac{\\pi}{10})} = \\frac{0}{2 \\sin(\\frac{\\pi}{10})} = 0 \\]\n\nWait, but in our case, the sum is from \\( k = 0 \\) to \\( 9 \\), which is 10 terms, each with angles \\( \\frac{(2k + 1)\\pi}{10} \\). So, actually, the sum is:\n\n\\[ \\sum_{k=0}^{9} \\cos\\left( \\frac{(2k + 1)\\pi}{10} \\right) \\]\n\nBut notice that \\( \\cos\\left( \\frac{(2k + 1)\\pi}{10} \\right) = \\cos\\left( \\frac{(2(k + 5) + 1)\\pi}{10} \\right) \\) for \\( k = 5 \\) to \\( 9 \\). Wait, no, that's not"
+        },
+        {
+            "turn": 3,
+            "model": "draft",
+            "output": " quite right.\n\nWait, actually, the angles for \\( k = 0 \\) to \\( 9 \\) are:\n\n\\( \\frac{\\pi}{10}, \\frac{3\\pi}{10}, \\frac{5\\pi}{10}, \\frac{7\\pi}{10}, \\frac{9\\pi}{10}, \\frac{11\\pi}{10}, \\frac{13\\pi}{10}, \\frac{15\\pi}{10}, \\frac{17\\pi}{10}, \\frac{19\\pi}{10} \\).\n\nBut \\( \\frac{11\\pi}{10} = \\pi + \\frac{\\pi}{10} \\), so cosine is \\( \\cos(\\pi + \\theta) = -\\cos(\\theta) \\).\n\nSimilarly, \\( \\frac{13\\pi}{10} = \\pi + \\frac{3\\pi}{10} \\), so cosine is \\( -\\cos(\\frac{3\\pi}{10}) \\).\n\nSimilarly, \\( \\frac{15\\pi}{10} = \\frac{3\\pi}{2} \\), cosine is 0.\n\n\\( \\frac{17\\pi}{10} = \\pi + \\frac{7\\pi}{10} \\), cosine is \\( -\\cos(\\frac{7\\pi}{10}) \\).\n\n\\( \\frac{19\\pi}{10} = \\pi + \\frac{9\\pi}{10} \\), cosine is \\( -\\cos(\\frac{9\\pi}{10}) \\).\n\nSo, the sum from \\( k = 0 \\) to \\( 9 \\) is:\n\n\\[ \\cos\\left( \\frac{\\pi}{10} \\right) + \\cos\\left( \\frac{3\\pi}{10} \\right) + \\cos\\left( \\frac{5\\pi}{10} \\right) + \\cos\\left( \\frac{7\\pi}{10} \\right) + \\cos\\left( \\frac{9\\pi}{10} \\right) + \\cos\\left( \\frac{11\\pi}{10} \\right) + \\cos\\left( \\frac{13\\pi}{10} \\right) + \\cos\\left( \\frac{15\\pi}{10} \\right) + \\cos\\left( \\frac{17\\pi}{10} \\right) +"
+        },
+        {
+            "turn": 3,
+            "model": "self_ppl",
+            "ppl": 1.0532052248161912,
+            "percentile": 0.040625
+        },
+        {
+            "turn": 4,
+            "model": "draft",
+            "output": " \\cos\\left( \\frac{19\\pi}{10} \\right) \\]\n\nSimplify using the identities above:\n\n= [cos(\u03c0/10) + cos(3\u03c0/10) + cos(\u03c0/2) + cos(7\u03c0/10) + cos(9\u03c0/10)] + [ -cos(\u03c0/10) - cos(3\u03c0/10) - cos(7\u03c0/10) - cos(9\u03c0/10) ] + cos(3\u03c0/2) + cos(\u03c0 + 7\u03c0/10) + cos(\u03c0 + 9\u03c0/10)\n\nWait, maybe it's better to note that the sum from k=0 to 9 is equal to twice the sum from k=0 to 4, because the terms from k=5 to 9 are negatives of the terms from k=0 to 4.\n\nWait, let's see:\n\nFor k=0: cos(\u03c0/10)\n\nk=1: cos(3\u03c0/10)\n\nk=2: cos(5\u03c0/10) = cos(\u03c0/2) = 0\n\nk=3: cos(7\u03c0/10) = cos(\u03c0 - 3\u03c0/10) = -cos(3\u03c0/10)\n\nk=4: cos(9\u03c0/10) = cos(\u03c0 - \u03c0/10) = -cos(\u03c0/10)\n\nk=5: cos(11\u03c0/10) = cos(\u03c0 + \u03c0/10) = -cos(\u03c0/10)\n\nk=6: cos(13\u03c0/10) = cos(\u03c0 + 3\u03c0/10) = -cos(3\u03c0/10)\n\nk=7: cos(15\u03c0/10) = cos(3\u03c0/2) = 0\n\nk=8: cos(17\u03c0/10) = cos(\u03c0 + 7\u03c0/10) = -cos(7\u03c0/10) = cos(3\u03c0/10)\n\nk=9: cos(19\u03c0/10) = cos(\u03c0 + 9\u03c0/10) = -cos(9\u03c0/10) = cos(\u03c0/10)\n\nWait, that seems a bit messy. Let me list all the terms:\n\nk=0: cos(\u03c0/10)\n\nk=1: cos(3\u03c0/10)\n\nk=2: 0\n\nk=3: -"
+        },
+        {
+            "turn": 4,
+            "model": "self_ppl",
+            "ppl": 1.0920720064638836,
+            "percentile": 0.29125
+        },
+        {
+            "turn": 5,
+            "model": "draft",
+            "output": "cos(3\u03c0/10)\n\nk=4: -cos(\u03c0/10)\n\nk=5: -cos(\u03c0/10)\n\nk=6: -cos(3\u03c0/10)\n\nk=7: 0\n\nk=8: cos(3\u03c0/10)\n\nk=9: cos(\u03c0/10)\n\nSo, adding them up:\n\ncos(\u03c0/10) + cos(3\u03c0/10) + 0 + (-cos(3\u03c0/10)) + (-cos(\u03c0/10)) + (-cos(\u03c0/10)) + (-cos(3\u03c0/10)) + 0 + cos(3\u03c0/10) + cos(\u03c0/10)\n\nLet me compute term by term:\n\n1. cos(\u03c0/10)\n2. + cos(3\u03c0/10)\n3. + 0\n4. - cos(3\u03c0/10)\n5. - cos(\u03c0/10)\n6. - cos(\u03c0/10)\n7. - cos(3\u03c0/10)\n8. + 0\n9. + cos(3\u03c0/10)\n10. + cos(\u03c0/10)\n\nNow, let's add them:\n\nTerm 1 and 5: cos(\u03c0/10) - cos(\u03c0/10) - cos(\u03c0/10) = -cos(\u03c0/10)\n\nTerm 2 and 4: cos(3\u03c0/10) - cos(3\u03c0/10) - cos(3\u03c0/10) = -cos(3\u03c0/10)\n\nTerm 6: -cos(\u03c0/10)\n\nTerm 7: -cos(3\u03c0/10)\n\nTerm 9: +cos(3\u03c0/10)\n\nTerm 10: +cos(\u03c0/10)\n\nSo, let's add them step by step:\n\nStart with 0.\n\nAdd term 1: cos(\u03c0/10)\n\nAdd term 2: cos(\u03c0/10) + cos(3\u03c0/10)\n\nAdd term 3: same as above\n\nAdd term 4: same as above - cos(3\u03c0/10) = cos(\u03c0/10)\n\nAdd term 5: cos(\u03c0/10) - cos(\u03c0/10) = 0\n\nAdd term 6: 0 - cos(\u03c0/10) = -cos(\u03c0/10)\n\nAdd term 7: -cos(\u03c0/10) - cos"
+        },
+        {
+            "turn": 5,
+            "model": "self_ppl",
+            "ppl": 1.0898149141532716,
+            "percentile": 0.265625
+        },
+        {
+            "turn": 6,
+            "model": "draft",
+            "output": "(3\u03c0/10)\n\nAdd term 8: same as above\n\nAdd term 9: same as above + cos(3\u03c0/10) = -cos(\u03c0/10)\n\nAdd term 10: -cos(\u03c0/10) + cos(\u03c0/10) = 0\n\nWait, that seems confusing. Maybe it's better to count how many times each cosine term appears.\n\nLooking back:\n\ncos(\u03c0/10) appears at k=0, k=4, k=5, k=9, k=10? Wait, no, k goes up to 9.\n\nWait, let's recount:\n\nFrom k=0 to k=9:\n\ncos(\u03c0/10) appears at k=0, k=4, k=5, k=9.\n\nWait, no:\n\nk=0: cos(\u03c0/10)\n\nk=1: cos(3\u03c0/10)\n\nk=2: 0\n\nk=3: -cos(3\u03c0/10)\n\nk=4: -cos(\u03c0/10)\n\nk=5: -cos(\u03c0/10)\n\nk=6: -cos(3\u03c0/10)\n\nk=7: 0\n\nk=8: cos(3\u03c0/10)\n\nk=9: cos(\u03c0/10)\n\nSo, cos(\u03c0/10) appears at k=0, k=4, k=5, k=9: total of 4 times.\n\nSimilarly, cos(3\u03c0/10) appears at k=1, k=3, k=6, k=8: total of 4 times.\n\nBut wait, in the sum, each positive term is canceled by a negative term.\n\nWait, let's see:\n\ncos(\u03c0/10) at k=0 is positive.\n\nAt k=4: -cos(\u03c0/10)\n\nAt k=5: -cos(\u03c0/10)\n\nAt k=9: +cos(\u03c0/10)\n\nSo, total for cos(\u03c0/10):\n\n1 -1 -1 +1 = 0\n\nSimilarly for cos(3\u03c0/10):\n\nk=1: +1\n\nk=3: -1\n\nk=6: -1\n\nk=8: +1\n\nTotal: 1 -1 -1 +1 = 0\n\nAnd the zeros at k=2 and k=7: total 0.\n\nSo, the entire sum S"
+        },
+        {
+            "turn": 6,
+            "model": "self_ppl",
+            "ppl": 1.1681916257665317,
+            "percentile": 0.76
+        },
+        {
+            "turn": 6,
+            "model": "self_continue",
+            "output": "_total = 0.\n\nTherefore, \\( \\sum_{k=0}^{9} \\text{Re}(\\omega_k) = 0 \\).\n\nWow, that's a relief. So, going back to S:\n\n\\[ S = 1700 - 26 \\times 0 = 1700. \\]\n\nSo, the sum over all 10 roots is 1700. Therefore, the sum over 5 pairs is half of that, which is 850.\n\nTherefore, the value we need is 850.\n\nWait, let me double-check.\n\nWe had:\n\n\\[ S = \\sum_{k=0}^{9} |1 - 13 \\omega_k |^2 = 1700 \\]\n\nBut since each pair \\( r_i, \\overline{r_i} \\) corresponds to two roots \\( \\omega \\) and \\( \\overline{\\omega} \\), and each pair contributes \\( |1 - 13 \\omega |^2 + |1 - 13 \\overline{\\omega} |^2 \\). But since \\( |1 - 13 \\overline{\\omega} |^2 = |1 - 13 \\omega |^2 \\) because \\( |z|^2 = | \\overline{z} |^2 \\). Therefore, each pair contributes twice the same value.\n\nWait, no, actually, for each pair \\( \\omega \\) and \\( \\overline{\\omega} \\), the sum is \\( |1 - 13 \\omega |^2 + |1 - 13 \\overline{\\omega} |^2 \\). But since \\( |1 - 13 \\overline{\\omega} |^2 = |1 - 13 \\omega |^2 \\), because \\( |z|^2 = | \\overline{z} |^2 \\). Therefore, each pair contributes \\( 2 |1 - 13 \\omega |^2 \\).\n\nBut in our case, we have 5 such pairs, each contributing \\( 2 |1 - 13 \\omega |^2 \\), so the total sum over all 10 roots is \\( 2 \\times \\sum_{i=1}^{5} |1 - 13 \\omega_i |^2 \\).\n\nWait, but earlier, I thought that S = 1700, which is the sum over all 10 roots. So, if S = 2 * sum_{"
+        },
+        {
+            "turn": 7,
+            "model": "draft",
+            "output": "i=1}^5 |1 - 13 \\omega_i |^2, then sum_{i=1}^5 |1 - 13 \\omega_i |^2 = S / 2 = 1700 / 2 = 850.\n\nYes, that's correct. So, the value we need is 850.\n\nTherefore, the answer is 850.\n\n**Final Answer**\n\\boxed{850}\n</think>\n\nTo solve the equation \n\n\\[x^{10} + (13x - 1)^{10} = 0\\]\n\nwe need to find the value of \n\n\\[\\frac{1}{r_1\\overline{r_1}} + \\frac{1}{r_2\\overline{r_2}} + \\frac{1}{r_3\\overline{r_3}} + \\frac{1}{r_4\\overline{r_4}} + \\frac{1}{r_5\\overline{r_5}}.\\]\n\nFirst, we note that the roots of the polynomial come in complex conjugate pairs. For each root \\( r_i \\), we have \\( r_i = \\omega_i (13r_i - 1) \\) where \\( \\omega_i \\) is a 10th root of -1. This can be rearranged to:\n\n\\[ r_i = \\frac{-\\omega_i}{1 - 13\\omega_i}. \\]\n\nThe magnitude squared of \\( r_i \\) is:\n\n\\[ |r_i|^2 = \\frac{1}{|1 - 13\\omega_i|^2}. \\]\n\nThus, we need to find:\n\n\\[ \\sum_{i=1}^{5} |1 - 13\\omega_i|^2. \\]\n\nThe 10th roots of -1 are \\( \\omega_k = e^{i\\pi(2k + 1)/10} \\) for \\( k = 0, 1, \\ldots, 9 \\). These roots come in conjugate pairs, so we can consider the sum over all 10 roots and then divide by 2. \n\nWe compute the sum:\n\n\\[ S = \\sum_{k=0}^{9} |1 - 13\\omega_k|^2. \\]\n\nExpanding \\( |1 - 13\\omega_k|^2 \\) and simplifying, we find:\n\n\\[ |1 - 13"
+        },
+        {
+            "turn": 7,
+            "model": "self_ppl",
+            "ppl": 1.081482510371321,
+            "percentile": 0.205
+        }
+    ],
+    "question": "The equation\n\\[x^{10}+(13x-1)^{10}=0\\,\\]has 10 complex roots $r_1,$ $\\overline{r}_1,$ $r_2,$ $\\overline{r}_2,$ $r_3,$ $\\overline{r}_3,$ $r_4,$ $\\overline{r}_4,$ $r_5,$ $\\overline{r}_5,$ where the bar denotes complex conjugation. Find the value of\n\\[\\frac 1{r_1\\overline{r}_1}+\\frac 1{r_2\\overline{r}_2}+\\frac 1{r_3\\overline{r}_3}+\\frac 1{r_4\\overline{r}_4}+\\frac 1{r_5\\overline{r}_5}.\\]"
+}
