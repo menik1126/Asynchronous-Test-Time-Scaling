@@ -1306,23 +1306,15 @@ class Scheduler:
                     if req.finished():
                         self.tree_cache.cache_finished_req(req)
                     elif not batch.decoding_reqs or req not in batch.decoding_reqs:
-                        if will_compress:
-                            # Only cache the prompt prefix (protect_len tokens) to
-                            # the radix tree.  The CoT portion will be compressed
-                            # and its unselected KV slots freed for real memory
-                            # savings.  Subsequent PPL / continuation requests
-                            # still hit the prompt prefix cache but must re-prefill
-                            # the CoT tokens.
-                            protect_len = self.server_args.kv_compress_protect_prefix
-                            custom = getattr(req.sampling_params, 'custom_params', None)
-                            if isinstance(custom, dict) and 'snapkv_protect_len' in custom:
-                                protect_len = custom['snapkv_protect_len']
-                            prefix_token_ids = req.fill_ids[:protect_len]
-                            self.tree_cache.cache_unfinished_req(req, token_ids=prefix_token_ids)
-                        else:
-                            self.tree_cache.cache_unfinished_req(req)
+                        # Always cache the full sequence first.  This ensures
+                        # that PPL evaluation (which runs BEFORE compression
+                        # triggers) gets a full prefix-cache hit for free.
+                        self.tree_cache.cache_unfinished_req(req)
 
                     # SnapKV KV cache compression with real memory freeing.
+                    # Compression only triggers on continuation requests
+                    # (seq_len >= min_seq_len), which arrive AFTER the PPL
+                    # evaluation has already used the full prefix cache.
                     if will_compress:
                         from sglang.srt.mem_cache.snapkv import (
                             compute_obs_attn_scores,
@@ -1360,15 +1352,22 @@ class Scheduler:
                                     req.req_pool_idx, :seq_len
                                 ]
 
-                                # Identify slots to free: those NOT selected AND
-                                # beyond the prompt prefix (prefix slots are owned
-                                # by the radix tree and must not be freed here).
+                                # Shrink the radix tree path to prompt-only so
+                                # that the CoT KV slots are no longer tree-owned
+                                # and can be freed.  The prompt prefix stays
+                                # cached for future requests.
+                                prefix_token_ids = req.fill_ids[:protect_len]
+                                self.tree_cache.cache_unfinished_req(
+                                    req, token_ids=prefix_token_ids
+                                )
+                                # After this, req.prefix_indices has protect_len
+                                # entries; the tree released its hold on CoT slots.
+
                                 import torch as _torch
+                                prefix_owned = len(req.prefix_indices) if req.prefix_indices is not None else 0
                                 all_positions = _torch.arange(seq_len, device=full_kv.device)
                                 keep_mask = _torch.zeros(seq_len, dtype=_torch.bool, device=full_kv.device)
                                 keep_mask[selected.to(full_kv.device)] = True
-                                # Protect radix-tree-owned prefix slots
-                                prefix_owned = len(req.prefix_indices) if req.prefix_indices is not None else 0
                                 keep_mask[:prefix_owned] = True
                                 unselected_private = all_positions[~keep_mask & (all_positions >= prefix_owned)]
                                 slots_to_free = full_kv[unselected_private]
