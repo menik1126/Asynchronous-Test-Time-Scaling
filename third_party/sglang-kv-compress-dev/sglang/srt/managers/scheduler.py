@@ -1379,6 +1379,7 @@ class Scheduler:
                                 req.original_seq_len = seq_len
                                 req.selected_positions = selected.cpu()
                                 req._snapkv_position_offset = seq_len - compressed_len
+                                req._snapkv_seq_lens_fixed = False
 
                                 num_freed = unselected_positions.numel() if unselected_positions is not None else 0
                                 logger.info(

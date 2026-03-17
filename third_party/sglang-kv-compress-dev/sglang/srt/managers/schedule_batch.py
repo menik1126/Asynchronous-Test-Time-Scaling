@@ -755,7 +755,15 @@ class ScheduleBatch:
 
         bs = len(self.reqs)
         reqs = self.reqs
-        input_ids = [r.fill_ids[len(r.prefix_indices) :] for r in reqs]
+
+        def _fill_offset(r):
+            # For compressed prefix, skip matched_token_len (not compressed KV
+            # count) positions in fill_ids, so we only extend the truly new tokens.
+            if getattr(r, "is_kv_compressed", False) and hasattr(r, "original_seq_len"):
+                return r.original_seq_len
+            return len(r.prefix_indices)
+
+        input_ids = [r.fill_ids[_fill_offset(r) :] for r in reqs]
         extend_num_tokens = sum(len(ids) for ids in input_ids)
         seq_lens = []
         pre_lens = []
@@ -770,28 +778,28 @@ class ScheduleBatch:
         pt = 0
         for i, req in enumerate(reqs):
             req.req_pool_idx = req_pool_indices[i]
-            pre_len, seq_len = len(req.prefix_indices), len(req.fill_ids)
+            # kv_pre_len: actual KV slots in prefix (compressed count)
+            # token_pre_len: matched tokens in original space (for positions, logprob offsets)
+            kv_pre_len = len(req.prefix_indices)
+            token_pre_len = _fill_offset(req)
+            seq_len = kv_pre_len + req.extend_input_len
             seq_lens.append(seq_len)
-            assert seq_len - pre_len == req.extend_input_len
 
-            if pre_len > 0:
+            if kv_pre_len > 0:
                 self.req_to_token_pool.write(
-                    (req.req_pool_idx, slice(0, pre_len)), req.prefix_indices
+                    (req.req_pool_idx, slice(0, kv_pre_len)), req.prefix_indices
                 )
 
-            # If input_embeds are available, store them
             if req.input_embeds is not None:
-                # If req.input_embeds is already a list, append its content directly
-                input_embeds.extend(req.input_embeds)  # Use extend to avoid nesting
+                input_embeds.extend(req.input_embeds)
 
-            req.cached_tokens += pre_len - req.already_computed
+            req.cached_tokens += kv_pre_len - req.already_computed
             req.already_computed = seq_len
             req.is_retracted = False
-            pre_lens.append(pre_len)
-            # Compute the relative logprob_start_len in an extend batch
-            if req.logprob_start_len >= pre_len:
+            pre_lens.append(kv_pre_len)
+            if req.logprob_start_len >= token_pre_len:
                 req.extend_logprob_start_len = min(
-                    req.logprob_start_len - pre_len,
+                    req.logprob_start_len - token_pre_len,
                     req.extend_input_len,
                     req.seqlen - 1,
                 )
@@ -813,7 +821,7 @@ class ScheduleBatch:
                 # fill_ids = [3, 4]
                 # extend_input_logprob_token_id = [4, 0]
                 global_start_idx, global_end_idx = (
-                    len(req.prefix_indices),
+                    _fill_offset(req),
                     len(req.fill_ids),
                 )
                 # Apply logprob_start_len

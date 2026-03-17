@@ -302,33 +302,29 @@ class ForwardBatch:
             ret.extend_prefix_lens = torch.tensor(
                 batch.extend_prefix_lens, dtype=torch.int32
             ).to(device, non_blocking=True)
+            # For RoPE position computation, use the original (uncompressed)
+            # prefix length so Q positions align with K's baked-in RoPE.
+            # extend_prefix_lens stays as the KV-space count for the
+            # attention backend's kv_indptr.
+            pos_prefix_lens = ret.extend_prefix_lens
+            if getattr(batch, "snapkv_position_offsets", None) is not None:
+                offsets_i32 = batch.snapkv_position_offsets.to(
+                    device=device, dtype=torch.int32
+                )
+                pos_prefix_lens = ret.extend_prefix_lens + offsets_i32
             if model_runner.server_args.attention_backend != "torch_native":
                 ret.extend_num_tokens = batch.extend_num_tokens
                 positions, ret.extend_start_loc = compute_position_triton(
-                    ret.extend_prefix_lens,
+                    pos_prefix_lens,
                     ret.extend_seq_lens,
                     ret.extend_num_tokens,
                 )
             else:
                 positions, ret.extend_start_loc = compute_position_torch(
-                    ret.extend_prefix_lens, ret.extend_seq_lens
+                    pos_prefix_lens, ret.extend_seq_lens
                 )
             if ret.positions is None:
                 ret.positions = positions
-            # SnapKV: when extending from a compressed prefix, the computed
-            # positions start from compressed_prefix_len but must continue
-            # from the original (uncompressed) position so RoPE stays correct.
-            if getattr(batch, "snapkv_position_offsets", None) is not None:
-                extend_token_counts = torch.tensor(
-                    [s - p for s, p in zip(batch.extend_seq_lens, batch.extend_prefix_lens)],
-                    device=ret.positions.device,
-                    dtype=torch.int32,
-                )
-                offsets_flat = batch.snapkv_position_offsets.to(
-                    ret.positions.device
-                ).repeat_interleave(extend_token_counts)
-                ret.positions = ret.positions + offsets_flat
-                ret._has_kv_compressed = True
             ret.extend_prefix_lens_cpu = batch.extend_prefix_lens
             ret.extend_seq_lens_cpu = batch.extend_seq_lens
             ret.extend_logprob_start_lens_cpu = batch.extend_logprob_start_lens
