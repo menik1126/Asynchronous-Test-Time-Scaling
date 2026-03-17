@@ -1133,27 +1133,27 @@ class ScheduleBatch:
         self.output_ids = None
 
         # Fix seq_lens for SnapKV-compressed requests:
-        # After compression, effective seq_len = compressed_seq_len + (decode steps since compression).
-        # Compression happens at prefill result time: original_seq_len includes first output token.
-        # compressed_seq_len is the compacted length at that moment.
-        # Each decode step since then added 1 more token to req_to_token at position compressed_seq_len, +1, ...
-        # output_ids grows: at compression time it had 1 token, now it has N tokens.
-        # So decode_steps_since_compress = len(output_ids) - 1
-        # effective_seq_len = compressed_seq_len + decode_steps_since_compress
+        # seq_lens must reflect the compacted KV length so flashinfer attends
+        # to the correct number of KV entries.  However, RoPE positions must
+        # continue from the *original* sequence length so that Q·K relative
+        # distances stay correct (K values already have their original RoPE
+        # baked in during prefill).  We store a per-request position offset
+        # to add back during decode position computation.
         if self.seq_lens is not None:
             for idx, req in enumerate(self.reqs):
                 if (
                     getattr(req, "is_kv_compressed", False)
                     and not getattr(req, "_snapkv_seq_lens_fixed", False)
                 ):
-                    # One-time fix: correct seq_lens from original to compressed length.
-                    # After this, seq_lens increments normally via add_(1) each decode step.
                     current_sl = self.seq_lens[idx].item()
                     new_sl = req.compressed_seq_len
+                    # Store the offset: original_pos - compressed_pos
+                    req._snapkv_position_offset = current_sl - new_sl
                     if current_sl != new_sl:
                         logger.info(
                             f"SnapKV decode seq_lens fix: req {req.rid} "
-                            f"{current_sl} -> {new_sl}"
+                            f"{current_sl} -> {new_sl} "
+                            f"(position_offset={req._snapkv_position_offset})"
                         )
                         self.seq_lens_sum += (new_sl - current_sl)
                         self.seq_lens[idx] = new_sl
@@ -1291,6 +1291,17 @@ class ScheduleBatch:
             else:
                 self.sampling_info.grammars = None
 
+        # Build SnapKV position offset tensor for decode
+        snapkv_pos_offsets = None
+        if self.forward_mode.is_decode_or_idle():
+            offsets = [
+                getattr(r, "_snapkv_position_offset", 0) for r in self.reqs
+            ]
+            if any(o != 0 for o in offsets):
+                snapkv_pos_offsets = torch.tensor(
+                    offsets, dtype=torch.int64, device=self.seq_lens.device
+                )
+
         global bid
         bid += 1
         return ModelWorkerBatch(
@@ -1334,6 +1345,7 @@ class ScheduleBatch:
                 )
             ),
             extend_input_logprob_token_ids=self.extend_input_logprob_token_ids,
+            snapkv_position_offsets=snapkv_pos_offsets,
         )
 
     def copy(self):
@@ -1420,6 +1432,9 @@ class ModelWorkerBatch:
     spec_info: Optional[Union[EagleVerifyInput, EagleDraftInput]] = None
     # If set, the output of the batch contains the hidden states of the run.
     capture_hidden_mode: CaptureHiddenMode = None
+
+    # SnapKV: per-request RoPE position offset (original_seq_len - compressed_seq_len)
+    snapkv_position_offsets: Optional[torch.Tensor] = None
 
 
 @triton.jit

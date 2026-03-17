@@ -284,6 +284,14 @@ class ForwardBatch:
         if ret.forward_mode.is_decode():
             if ret.positions is None:
                 ret.positions = clamp_position(batch.seq_lens)
+                # SnapKV fix: after KV compression, seq_lens reflects the
+                # compacted length but RoPE positions must continue from the
+                # original sequence length (K values in cache already have
+                # their original RoPE baked in during prefill).
+                if getattr(batch, "snapkv_position_offsets", None) is not None:
+                    ret.positions = ret.positions + batch.snapkv_position_offsets.to(
+                        ret.positions.device
+                    )
             if ret.decode_seq_lens_cpu is None:
                 ret.decode_seq_lens_cpu = batch.decode_seq_lens
         else:
