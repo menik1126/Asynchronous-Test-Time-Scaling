@@ -1294,28 +1294,23 @@ class Scheduler:
                     req.output_ids.append(next_token_id)
                     req.check_finished()
 
-                    # Determine if this request will be compressed
-                    will_compress = (
+                    if req.finished():
+                        self.tree_cache.cache_finished_req(req)
+                    elif not batch.decoding_reqs or req not in batch.decoding_reqs:
+                        # Write back to tree first (preserves prefix cache for future turns)
+                        self.tree_cache.cache_unfinished_req(req)
+
+                    # SnapKV attention-only compression: shorten the attention window
+                    # without freeing slots (tree still owns them for prefix sharing).
+                    # This reduces decode compute while preserving radix cache hit rate.
+                    # Skip for short-decode requests (e.g., PPL with max_new_tokens=1).
+                    if (
                         not req.finished()
                         and self.server_args.enable_kv_compress
                         and not getattr(req, "is_kv_compressed", False)
                         and req.seqlen >= self.server_args.kv_compress_min_seq_len
                         and req.sampling_params.max_new_tokens > 1
-                    )
-
-                    if req.finished():
-                        self.tree_cache.cache_finished_req(req)
-                    elif not batch.decoding_reqs or req not in batch.decoding_reqs:
-                        # Always cache the full sequence first.  This ensures
-                        # that PPL evaluation (which runs BEFORE compression
-                        # triggers) gets a full prefix-cache hit for free.
-                        self.tree_cache.cache_unfinished_req(req)
-
-                    # SnapKV KV cache compression with real memory freeing.
-                    # Compression only triggers on continuation requests
-                    # (seq_len >= min_seq_len), which arrive AFTER the PPL
-                    # evaluation has already used the full prefix cache.
-                    if will_compress:
+                    ):
                         from sglang.srt.mem_cache.snapkv import (
                             compute_obs_attn_scores,
                             snapkv_select_positions,
@@ -1335,6 +1330,7 @@ class Scheduler:
                                 req, self.req_to_token_pool, kvcache, obs_window=obs_window,
                             )
                             if attn_weights is not None:
+                                # Dynamic protect_prefix: use question length from chat API if available
                                 protect_len = self.server_args.kv_compress_protect_prefix
                                 custom = getattr(req.sampling_params, 'custom_params', None)
                                 if isinstance(custom, dict) and 'snapkv_protect_len' in custom:
@@ -1347,35 +1343,11 @@ class Scheduler:
                                     obs_window=obs_window,
                                     protect_prefix=protect_len,
                                 )
-
+                                # Compact selected KV indices into req_to_token
+                                # (no freeing — slots are shared with tree)
                                 full_kv = self.req_to_token_pool.req_to_token[
                                     req.req_pool_idx, :seq_len
                                 ]
-
-                                # Shrink the radix tree path to prompt-only so
-                                # that the CoT KV slots are no longer tree-owned
-                                # and can be freed.  The prompt prefix stays
-                                # cached for future requests.
-                                prefix_token_ids = req.fill_ids[:protect_len]
-                                self.tree_cache.cache_unfinished_req(
-                                    req, token_ids=prefix_token_ids
-                                )
-                                # After this, req.prefix_indices has protect_len
-                                # entries; the tree released its hold on CoT slots.
-
-                                import torch as _torch
-                                prefix_owned = len(req.prefix_indices) if req.prefix_indices is not None else 0
-                                all_positions = _torch.arange(seq_len, device=full_kv.device)
-                                keep_mask = _torch.zeros(seq_len, dtype=_torch.bool, device=full_kv.device)
-                                keep_mask[selected.to(full_kv.device)] = True
-                                keep_mask[:prefix_owned] = True
-                                unselected_private = all_positions[~keep_mask & (all_positions >= prefix_owned)]
-                                slots_to_free = full_kv[unselected_private]
-
-                                if slots_to_free.numel() > 0:
-                                    self.token_to_kv_pool_allocator.free(slots_to_free)
-
-                                # Compact selected KV indices
                                 selected_kv = full_kv[selected.to(full_kv.device)]
                                 compressed_len = len(selected_kv)
                                 self.req_to_token_pool.req_to_token[
@@ -1387,14 +1359,10 @@ class Scheduler:
                                 req.original_seq_len = seq_len
                                 req.selected_positions = selected.cpu()
 
-                                num_freed = slots_to_free.numel()
                                 logger.info(
-                                    f"SnapKV compress req {req.rid}: "
-                                    f"{seq_len} -> {compressed_len} tokens, "
-                                    f"freed {num_freed} KV slots "
-                                    f"(budget={budget}, protect={protect_len}, "
-                                    f"prefix_owned={prefix_owned}, "
-                                    f"ratio={compressed_len/seq_len:.1%})"
+                                    f"SnapKV attention-compress req {req.rid}: "
+                                    f"{seq_len} -> {compressed_len} tokens "
+                                    f"(budget={budget}, protect={protect_len}, ratio={compressed_len/seq_len:.1%}, tree cached)"
                                 )
                         except Exception as e:
                             import traceback as tb
