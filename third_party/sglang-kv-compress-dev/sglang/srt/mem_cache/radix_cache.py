@@ -408,7 +408,8 @@ class RadixCache(BasePrefixCache):
                 node = child
                 key = key[prefix_len:]
         all_selected = (
-            torch.cat(selected_positions_parts) if selected_positions_parts
+            torch.cat([p.cpu() for p in selected_positions_parts])
+            if selected_positions_parts
             else torch.tensor([], dtype=torch.int64)
         )
         return value, node, matched_key_len, total_offset, all_selected
