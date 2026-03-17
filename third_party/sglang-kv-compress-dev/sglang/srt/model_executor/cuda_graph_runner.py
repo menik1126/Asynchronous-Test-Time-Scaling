@@ -295,7 +295,11 @@ class CudaGraphRunner:
             if self.is_encoder_decoder
             else True
         )
-        return is_bs_supported and is_encoder_lens_supported
+
+        # Skip CUDA graph for KV-compressed requests to avoid numerical
+        # issues with non-contiguous KV indices in flashinfer CG wrapper.
+        has_compressed = getattr(forward_batch, "_has_kv_compressed", False)
+        return is_bs_supported and is_encoder_lens_supported and not has_compressed
 
     def capture(self):
         with graph_capture() as graph_capture_context:

@@ -292,6 +292,7 @@ class ForwardBatch:
                     ret.positions = ret.positions + batch.snapkv_position_offsets.to(
                         ret.positions.device
                     )
+                    ret._has_kv_compressed = True
             if ret.decode_seq_lens_cpu is None:
                 ret.decode_seq_lens_cpu = batch.decode_seq_lens
         else:
