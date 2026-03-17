@@ -298,8 +298,13 @@ class CudaGraphRunner:
 
         # Skip CUDA graph for KV-compressed requests to avoid numerical
         # issues with non-contiguous KV indices in flashinfer CG wrapper.
-        has_compressed = getattr(forward_batch, "_has_kv_compressed", False)
-        return is_bs_supported and is_encoder_lens_supported and not has_compressed
+        # Set SGLANG_CG_SKIP_COMPRESS=1 to enable this safety check.
+        import os
+        if os.environ.get("SGLANG_CG_SKIP_COMPRESS"):
+            has_compressed = getattr(forward_batch, "_has_kv_compressed", False)
+            if has_compressed:
+                return False
+        return is_bs_supported and is_encoder_lens_supported
 
     def capture(self):
         with graph_capture() as graph_capture_context:
@@ -473,6 +478,39 @@ class CudaGraphRunner:
             forward_batch.spec_info,
             seq_lens_cpu=self.seq_lens_cpu,
         )
+
+        # [DEBUG] Experiment A+B: verify positions and kv_indices for compressed requests
+        import os
+        if os.environ.get("SGLANG_DEBUG_CG_COMPRESS") and getattr(forward_batch, "_has_kv_compressed", False):
+            import logging
+            _dbg = logging.getLogger("sglang")
+            # Exp A: positions
+            fb_pos = forward_batch.positions[:raw_num_token]
+            cg_pos = self.positions[:raw_num_token]
+            pos_match = torch.equal(fb_pos, cg_pos)
+            _dbg.info(
+                f"[DEBUG-CG] Positions: match={pos_match}, "
+                f"fb_positions={fb_pos.tolist()[:5]}, "
+                f"cg_positions={cg_pos.tolist()[:5]}, "
+                f"seq_lens={self.seq_lens[:raw_bs].tolist()[:5]}"
+            )
+            # Exp B: kv_indices from flashinfer wrapper
+            try:
+                decode_wrappers = self.model_runner.attn_backend.decode_cuda_graph_metadata.get(bs)
+                if decode_wrappers:
+                    w = decode_wrappers[0]
+                    kv_indptr = self.model_runner.attn_backend.kv_indptr[0][:raw_bs+1]
+                    total_kv = kv_indptr[raw_bs].item() if raw_bs <= len(kv_indptr)-1 else -1
+                    kv_buf = getattr(w, '_paged_kv_indices_buf', None)
+                    if kv_buf is not None:
+                        sample_indices = kv_buf[:min(20, total_kv)].tolist()
+                        _dbg.info(
+                            f"[DEBUG-CG] KV indices: total_kv={total_kv}, "
+                            f"kv_indptr={kv_indptr.tolist()[:5]}, "
+                            f"first_20_kv_indices={sample_indices}"
+                        )
+            except Exception as e:
+                _dbg.info(f"[DEBUG-CG] KV indices check failed: {e}")
 
         # Replay
         self.graphs[bs].replay()

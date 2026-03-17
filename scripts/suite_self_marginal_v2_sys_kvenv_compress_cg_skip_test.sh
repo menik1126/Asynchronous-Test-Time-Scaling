@@ -22,7 +22,7 @@ CONTINUE_MAX_TOKENS=500
 EXTRACT_MODE="regex"
 MAX_RETRIES=3
 
-MODEL_DEVICE="7"
+MODEL_DEVICE="3"
 
 # Set to 0 for full evaluation, >0 to limit for debugging
 MAX_PROBLEMS=0
@@ -98,7 +98,7 @@ env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_
     CUDA_VISIBLE_DEVICES=$MODEL_DEVICE $PYTHON -m sglang.launch_server \
     --model-path "$MODEL" \
     --tp 1 \
-    --mem-fraction-static 0.55 \
+    --mem-fraction-static 0.80 \
     --host "$SGLANG_HOST" \
     --port "$MODEL_PORT" \
     --watchdog-timeout 600 \
