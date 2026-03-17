@@ -310,15 +310,10 @@ class FlashInferAttnBackend(AttentionBackend):
             )
             self.decode_cuda_graph_metadata[bs] = decode_wrappers
             self.forward_metadata = DecodeMetadata(decode_wrappers)
-            # Only use fast_decode_plan when KV compression is disabled.
-            # fast_decode_plan skips buffer copies that are needed when
-            # seq_lens distribution changes after compression.
-            import os
-            if not os.environ.get("SGLANG_DISABLE_FAST_DECODE_PLAN"):
-                for i in range(self.num_wrappers):
-                    decode_wrappers[i].begin_forward = partial(
-                        fast_decode_plan, decode_wrappers[i]
-                    )
+            for i in range(self.num_wrappers):
+                decode_wrappers[i].begin_forward = partial(
+                    fast_decode_plan, decode_wrappers[i]
+                )
         elif forward_mode.is_target_verify():
             prefill_wrappers = []
             for i in range(self.num_wrappers):
@@ -1176,12 +1171,10 @@ def fast_decode_plan(
             raise ValueError(
                 "The size of indices should be less than or equal to the allocated buffer"
             )
-        # Restore copies to ensure plan() sees correct data.
-        # These are needed when seq_lens distribution changes significantly
-        # (e.g., after KV cache compression).
-        self._paged_kv_indptr_buf.copy_(indptr)
-        self._paged_kv_indices_buf[: len(indices)].copy_(indices)
-        self._paged_kv_last_page_len_buf.copy_(last_page_len)
+        # Skip these copies because we directly write to them during prepartion
+        # self._paged_kv_indptr_buf.copy_(indptr)
+        # self._paged_kv_indices_buf[: len(indices)] = indices
+        # self._paged_kv_last_page_len_buf.copy_(last_page_len)
     else:
         self._paged_kv_indptr_buf = indptr
         self._paged_kv_indices_buf = indices
