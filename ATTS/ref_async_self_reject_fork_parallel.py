@@ -86,7 +86,7 @@ class SamplePool:
         async with self._lock:
             self._states[idx].finished = True
 
-    async def best_peer(self, exclude_idx: int, alpha: float, beta: float = 0.0):
+    async def best_peer(self, exclude_idx: int, alpha: float, beta: float = 0.0, fork_high_ppl: bool = False):
         """Return a *snapshot* of the best-scored peer, or None."""
         async with self._lock:
             candidates = [
@@ -97,7 +97,8 @@ class SamplePool:
             ]
             if not candidates:
                 return None
-            best = min(candidates, key=lambda s: s.score(alpha, beta))
+            selector = max if fork_high_ppl else min
+            best = selector(candidates, key=lambda s: s.score(alpha, beta))
             return SampleState(
                 idx=best.idx,
                 history=list(best.history),
@@ -380,6 +381,7 @@ async def process_single_problem(
     fork_temperature: float,
     fork_gap: float = 0.05,
     beta: float = 0.0,
+    fork_high_ppl: bool = False,
 ):
     """Multi-turn loop with rejection sampling + cross-sample forking.
 
@@ -471,7 +473,7 @@ async def process_single_problem(
 
         if not accepted:
             # --- Cross-sample fork ---
-            peer = await pool.best_peer(exclude_idx=idx, alpha=alpha, beta=beta)
+            peer = await pool.best_peer(exclude_idx=idx, alpha=alpha, beta=beta, fork_high_ppl=fork_high_ppl)
 
             my_chars = sum(len(h) for h in prompt[1])
             my_avg_ppl = (
@@ -604,6 +606,9 @@ async def main():
     parser.add_argument("--beta", type=float, default=0.0,
                         help="Length reward weight in fork scoring: score -= beta * (total_chars/1000). "
                              "Higher beta favors forking from peers with longer reasoning chains (default: 0.0).")
+    parser.add_argument("--fork_high_ppl", action="store_true",
+                        help="Fork from the peer with HIGHEST score (highest PPL) instead of lowest. "
+                             "Explores more uncertain reasoning paths.")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -697,6 +702,7 @@ async def main():
                         args.fork_temperature,
                         args.fork_gap,
                         args.beta,
+                        args.fork_high_ppl,
                     )
                 )
                 all_tasks.append(task)
