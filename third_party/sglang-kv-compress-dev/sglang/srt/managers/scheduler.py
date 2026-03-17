@@ -1312,7 +1312,12 @@ class Scheduler:
                         try:
                             obs_window = self.server_args.kv_compress_obs_window
                             kvcache = self.token_to_kv_pool_allocator.get_kvcache()
-                            seq_len = req.seqlen
+                            # Use KV-space seq_len, not token-space req.seqlen.
+                            # For requests that matched a compressed prefix,
+                            # req.seqlen includes the position_offset gap where
+                            # req_to_token has stale data.
+                            kv_offset = getattr(req, "_snapkv_position_offset", 0)
+                            seq_len = req.seqlen - kv_offset
 
                             budget = self.server_args.kv_compress_budget
                             if self.server_args.kv_compress_ratio > 0:

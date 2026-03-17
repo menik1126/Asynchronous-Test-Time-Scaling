@@ -405,11 +405,16 @@ class Req:
                 self.last_node, "_match_token_len", len(self.prefix_indices)
             )
             if pos_offset > 0:
-                self.is_kv_compressed = True
-                self.compressed_seq_len = len(self.prefix_indices)
+                # Don't set is_kv_compressed here — that flag means
+                # "this request's KV was compressed by SnapKV", not
+                # "this request matched a compressed prefix".  The
+                # scheduler sets is_kv_compressed after actual compression.
                 self.original_seq_len = matched_token_len
                 self._snapkv_position_offset = pos_offset
                 self._snapkv_seq_lens_fixed = True
+                self._prefix_selected_positions = getattr(
+                    self.last_node, "_match_selected_positions", None
+                )
                 self.extend_input_len = len(self.fill_ids) - matched_token_len
             else:
                 self.extend_input_len = len(self.fill_ids) - len(self.prefix_indices)
@@ -757,9 +762,9 @@ class ScheduleBatch:
         reqs = self.reqs
 
         def _fill_offset(r):
-            # For compressed prefix, skip matched_token_len (not compressed KV
-            # count) positions in fill_ids, so we only extend the truly new tokens.
-            if getattr(r, "is_kv_compressed", False) and hasattr(r, "original_seq_len"):
+            # For requests with compressed prefix (matched or self-compressed),
+            # skip matched_token_len positions in fill_ids.
+            if getattr(r, "_snapkv_position_offset", 0) > 0 and hasattr(r, "original_seq_len"):
                 return r.original_seq_len
             return len(r.prefix_indices)
 

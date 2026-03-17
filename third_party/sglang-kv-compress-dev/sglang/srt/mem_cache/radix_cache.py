@@ -116,17 +116,16 @@ class RadixCache(BasePrefixCache):
         if self.disable:
             return [], self.root_node
 
-        value, last_node, matched_key_len, total_offset = (
+        value, last_node, matched_key_len, total_offset, all_selected = (
             self._match_prefix_helper(self.root_node, key)
         )
         if value:
             value = torch.concat(value)
         else:
             value = torch.tensor([], dtype=torch.int32)
-        # Stash match metadata on the node so callers can retrieve it
-        # without changing the return signature for every call-site.
         last_node._match_position_offset = total_offset
         last_node._match_token_len = matched_key_len
+        last_node._match_selected_positions = all_selected
         return value, last_node
 
     def insert(self, key: List, value=None):
@@ -222,15 +221,42 @@ class RadixCache(BasePrefixCache):
 
         if token_ids is None:
             token_ids = (req.origin_input_ids + req.output_ids)[:-1]
+
+        # When the request extended from a compressed prefix, the valid
+        # KV entries in req_to_token are fewer than len(token_ids) by
+        # position_offset.  Use the KV-space length to avoid reading
+        # stale data, and insert_compressed to handle the mismatch.
+        kv_offset = getattr(req, "_snapkv_position_offset", 0)
+        kv_len = len(token_ids) - kv_offset
         kv_indices = self.req_to_token_pool.req_to_token[
-            req.req_pool_idx, : len(token_ids)
+            req.req_pool_idx, :kv_len
         ]
 
-        # Radix Cache takes one ref in memory pool
-        new_prefix_len = self.insert(token_ids, kv_indices.clone())
-        self.token_to_kv_pool_allocator.free(
-            kv_indices[len(req.prefix_indices) : new_prefix_len]
-        )
+        if kv_offset > 0:
+            # Build selected_positions: the first kv_pre_len entries map
+            # to scattered positions (from compressed prefix), the rest
+            # are contiguous (from the extend portion).
+            kv_pre_len = len(req.prefix_indices) if req.prefix_indices is not None else 0
+            extend_len = kv_len - kv_pre_len
+            # Prefix positions come from the tree's compressed node
+            prefix_node_sel = getattr(req, "_prefix_selected_positions", None)
+            if prefix_node_sel is not None and len(prefix_node_sel) == kv_pre_len:
+                prefix_positions = prefix_node_sel
+            else:
+                prefix_positions = torch.arange(kv_pre_len, dtype=torch.int64)
+            # Extend positions are contiguous starting after matched_token_len
+            matched_token_len = kv_pre_len + kv_offset
+            extend_positions = torch.arange(
+                matched_token_len, matched_token_len + extend_len, dtype=torch.int64
+            )
+            all_selected = torch.cat([prefix_positions, extend_positions])
+            self.insert_compressed(token_ids, kv_indices.clone(), all_selected)
+        else:
+            # Normal (uncompressed) path
+            new_prefix_len = self.insert(token_ids, kv_indices.clone())
+            self.token_to_kv_pool_allocator.free(
+                kv_indices[len(req.prefix_indices) : new_prefix_len]
+            )
 
         # Remove req slot release the cache lock
         self.req_to_token_pool.free(req.req_pool_idx)
@@ -345,6 +371,7 @@ class RadixCache(BasePrefixCache):
     def _match_prefix_helper(self, node: TreeNode, key: List):
         node.last_access_time = time.time()
         value = []
+        selected_positions_parts = []
         matched_key_len = 0
         total_offset = 0
         while len(key) > 0 and key[0] in node.children.keys():
@@ -354,17 +381,37 @@ class RadixCache(BasePrefixCache):
             if prefix_len < len(child.key):
                 new_node = self._split_node(child.key, child, prefix_len)
                 value.append(new_node.value)
+                if new_node.position_offset > 0 and new_node.selected_positions is not None:
+                    selected_positions_parts.append(
+                        new_node.selected_positions + matched_key_len
+                    )
+                else:
+                    selected_positions_parts.append(
+                        torch.arange(len(new_node.value), dtype=torch.int64) + matched_key_len
+                    )
                 matched_key_len += prefix_len
                 total_offset += new_node.position_offset
                 node = new_node
                 break
             else:
                 value.append(child.value)
+                if child.position_offset > 0 and child.selected_positions is not None:
+                    selected_positions_parts.append(
+                        child.selected_positions + matched_key_len
+                    )
+                else:
+                    selected_positions_parts.append(
+                        torch.arange(len(child.value), dtype=torch.int64) + matched_key_len
+                    )
                 matched_key_len += len(child.key)
                 total_offset += child.position_offset
                 node = child
                 key = key[prefix_len:]
-        return value, node, matched_key_len, total_offset
+        all_selected = (
+            torch.cat(selected_positions_parts) if selected_positions_parts
+            else torch.tensor([], dtype=torch.int64)
+        )
+        return value, node, matched_key_len, total_offset, all_selected
 
     def _split_node(self, key, child: TreeNode, split_len: int):
         # new_node -> child
