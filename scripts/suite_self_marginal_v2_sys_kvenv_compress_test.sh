@@ -22,10 +22,10 @@ CONTINUE_MAX_TOKENS=500
 EXTRACT_MODE="regex"
 MAX_RETRIES=3
 
-MODEL_DEVICE="3"
+MODEL_DEVICE="2"
 
-# Debug: only process N unique problems (0 = all)
-MAX_PROBLEMS=5
+# Set to 0 for full evaluation, >0 to limit for debugging
+MAX_PROBLEMS=0
 
 # SnapKV compression params
 KV_COMPRESS_BUDGET=256
@@ -48,12 +48,12 @@ OUTPUT_DIR="${PROJECT_DIR}/results/self_prefill_v2sys_kvenv_compress_${model_sho
 mkdir -p "$OUTPUT_DIR"
 
 echo "===================================================================================="
-echo "ATTS Self-Evaluation (Marginal Coverage) — KV-Env WITH SnapKV Compression (Debug)"
+echo "ATTS Self-Evaluation (Marginal Coverage) — KV-Env WITH SnapKV Compression"
 echo "  Model:       $MODEL (GPU $MODEL_DEVICE, port $MODEL_PORT)"
 echo "  Dataset:     $DATASET_NAME (sample_size=$SAMPLE_SIZE)"
 echo "  PPL Path:    $PPL_ARRAY_PATH"
 echo "  Output Dir:  $OUTPUT_DIR"
-echo "  Max Problems: $MAX_PROBLEMS (debug mode)"
+echo "  Max Problems: $MAX_PROBLEMS (0=all)"
 echo "  KV Compress: budget=$KV_COMPRESS_BUDGET, ratio=$KV_COMPRESS_RATIO, recent=$KV_COMPRESS_RECENT"
 echo "===================================================================================="
 
@@ -98,7 +98,7 @@ env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u no_proxy -u NO_
     CUDA_VISIBLE_DEVICES=$MODEL_DEVICE $PYTHON -m sglang.launch_server \
     --model-path "$MODEL" \
     --tp 1 \
-    --mem-fraction-static 0.9 \
+    --mem-fraction-static 0.85 \
     --host "$SGLANG_HOST" \
     --port "$MODEL_PORT" \
     --watchdog-timeout 600 \
@@ -121,8 +121,9 @@ sleep 5
 echo "  Server ready!"
 
 echo ""
-echo "[Step 2/2] Running self-async evaluation (with KV compression, debug=$MAX_PROBLEMS problems)..."
+echo "[Step 2/2] Running self-async evaluation (with KV compression, max_problems=$MAX_PROBLEMS)..."
 no_proxy="localhost,127.0.0.1,0.0.0.0" NO_PROXY="localhost,127.0.0.1,0.0.0.0" \
+    HF_HOME=/tmp/hf_cache HF_HUB_OFFLINE=1 \
     $PYTHON -m ATTS.ref_async_self \
     --model_name "$MODEL" \
     --dataset_name "$DATASET_NAME" \
@@ -146,7 +147,7 @@ fi
 
 echo ""
 echo "===================================================================================="
-echo "KV-compress debug test completed!"
+echo "KV-compress evaluation completed!"
 echo "  Results: $OUTPUT_DIR"
 echo "  PPL:     $PPL_ARRAY_PATH"
 echo "===================================================================================="
