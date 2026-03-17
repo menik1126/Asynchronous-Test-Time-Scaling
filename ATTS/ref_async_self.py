@@ -377,6 +377,7 @@ async def main():
     parser.add_argument("--max_retries", type=int, default=3)
     parser.add_argument("--extract_mode", type=str, choices=["regex", "llm"], default="regex")
     parser.add_argument("--output_dir", type=str, required=True)
+    parser.add_argument("--max_problems", type=int, default=0, help="Max unique problems to process (0 = all). Useful for debugging.")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -415,6 +416,9 @@ async def main():
         end_idx = start_idx + args.repeats
         if any(idx not in processed_sample_indices for idx in range(start_idx, end_idx)):
             unique_problems_to_process.append(unique_idx)
+
+    if args.max_problems > 0:
+        unique_problems_to_process = unique_problems_to_process[:args.max_problems]
 
     if not unique_problems_to_process:
         print("All tasks already finished.")
@@ -462,24 +466,45 @@ async def main():
 
     print(f"Time: {time.time() - start_time:.3f}s")
 
-    all_files_exist = True
-    for idx in range(total_samples):
-        filepath = os.path.join(args.output_dir, f"problem_{idx:04d}.json")
-        if not os.path.exists(filepath):
-            print(f"Error: {filepath} missing.")
-            all_files_exist = False
-            break
-
-    if all_files_exist:
+    if args.max_problems > 0:
+        eval_problems = unique_problems_to_process
+        eval_total = len(eval_problems) * args.repeats
+        print(f"Debug mode: evaluating {len(eval_problems)} problems ({eval_total} samples)")
         all_results = []
+        all_answers = []
+        for unique_idx in eval_problems:
+            start_sample_idx = unique_idx * args.repeats
+            end_sample_idx = start_sample_idx + args.repeats
+            for idx in range(start_sample_idx, end_sample_idx):
+                filepath = os.path.join(args.output_dir, f"problem_{idx:04d}.json")
+                if os.path.exists(filepath):
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        all_results.append((data["final_answer"], data["duration_seconds"]))
+                        all_answers.append(answer[idx])
+                else:
+                    print(f"Warning: {filepath} missing.")
+        if all_results:
+            await compute_score(all_results, all_answers, args.repeats)
+    else:
+        all_files_exist = True
         for idx in range(total_samples):
             filepath = os.path.join(args.output_dir, f"problem_{idx:04d}.json")
-            with open(filepath, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                all_results.append((data["final_answer"], data["duration_seconds"]))
-        await compute_score(all_results, answer, args.repeats)
-    else:
-        print("Missing result files. Rerun to complete.")
+            if not os.path.exists(filepath):
+                print(f"Error: {filepath} missing.")
+                all_files_exist = False
+                break
+
+        if all_files_exist:
+            all_results = []
+            for idx in range(total_samples):
+                filepath = os.path.join(args.output_dir, f"problem_{idx:04d}.json")
+                with open(filepath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    all_results.append((data["final_answer"], data["duration_seconds"]))
+            await compute_score(all_results, answer, args.repeats)
+        else:
+            print("Missing result files. Rerun to complete.")
 
     await client.aclose()
 
