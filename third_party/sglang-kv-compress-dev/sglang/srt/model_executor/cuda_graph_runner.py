@@ -459,6 +459,13 @@ class CudaGraphRunner:
         if hasattr(forward_batch.spec_info, "hidden_states"):
             self.hidden_states[:raw_num_token] = forward_batch.spec_info.hidden_states
 
+        # Clear workspace buffer to prevent stale split-k residuals from
+        # previous plan() calls contaminating the current decode.
+        # This is needed when seq_lens distribution changes between replays
+        # (e.g., after KV cache compression).
+        if getattr(forward_batch, "_has_kv_compressed", False):
+            self.model_runner.attn_backend.workspace_buffer.zero_()
+
         # Attention backend
         self.model_runner.attn_backend.init_forward_metadata_replay_cuda_graph(
             bs,
