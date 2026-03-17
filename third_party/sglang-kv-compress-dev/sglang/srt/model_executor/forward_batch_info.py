@@ -315,6 +315,20 @@ class ForwardBatch:
                 )
             if ret.positions is None:
                 ret.positions = positions
+            # SnapKV: when extending from a compressed prefix, the computed
+            # positions start from compressed_prefix_len but must continue
+            # from the original (uncompressed) position so RoPE stays correct.
+            if getattr(batch, "snapkv_position_offsets", None) is not None:
+                extend_token_counts = torch.tensor(
+                    [s - p for s, p in zip(batch.extend_seq_lens, batch.extend_prefix_lens)],
+                    device=ret.positions.device,
+                    dtype=torch.int32,
+                )
+                offsets_flat = batch.snapkv_position_offsets.to(
+                    ret.positions.device
+                ).repeat_interleave(extend_token_counts)
+                ret.positions = ret.positions + offsets_flat
+                ret._has_kv_compressed = True
             ret.extend_prefix_lens_cpu = batch.extend_prefix_lens
             ret.extend_seq_lens_cpu = batch.extend_seq_lens
             ret.extend_logprob_start_lens_cpu = batch.extend_logprob_start_lens

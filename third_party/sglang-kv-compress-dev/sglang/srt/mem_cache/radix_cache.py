@@ -52,6 +52,11 @@ class TreeNode:
         # store the host indices of KV cache
         self.host_value = None
 
+        # KV compression: when position_offset > 0, len(value) < len(key).
+        # selected_positions maps each value entry to its original key position.
+        self.position_offset = 0
+        self.selected_positions = None
+
         self.id = TreeNode.counter if id is None else id
         TreeNode.counter += 1
 
@@ -98,25 +103,30 @@ class RadixCache(BasePrefixCache):
         self.evictable_size_ = 0
         self.protected_size_ = 0
 
-    def match_prefix(self, key: List[int], **kwargs) -> Tuple[torch.Tensor, int]:
+    def match_prefix(self, key: List[int], **kwargs) -> Tuple[torch.Tensor, "TreeNode"]:
         """Find the matching prefix from the radix tree.
-        Args:
-            key: A list of token IDs to find a matching prefix.
+
         Returns:
-            A tuple of a tensor of matching prefix token IDs and
-            the last node that contains the prefix values. Note that
-            this API can modify the internal state of the Radix tree.
-            The last node create a new child if the prefix is shorter
-            than the last node's value.
+            (kv_indices, last_node) where kv_indices may be shorter than
+            the number of matched tokens when compressed nodes are on the
+            path.  Callers should use ``last_node`` to retrieve
+            ``position_offset`` accumulated along the matched path via
+            :meth:`get_match_position_offset`.
         """
         if self.disable:
             return [], self.root_node
 
-        value, last_node = self._match_prefix_helper(self.root_node, key)
+        value, last_node, matched_key_len, total_offset = (
+            self._match_prefix_helper(self.root_node, key)
+        )
         if value:
             value = torch.concat(value)
         else:
             value = torch.tensor([], dtype=torch.int32)
+        # Stash match metadata on the node so callers can retrieve it
+        # without changing the return signature for every call-site.
+        last_node._match_position_offset = total_offset
+        last_node._match_token_len = matched_key_len
         return value, last_node
 
     def insert(self, key: List, value=None):
@@ -126,6 +136,58 @@ class RadixCache(BasePrefixCache):
         if value is None:
             value = [x for x in key]
         return self._insert_helper(self.root_node, key, value)
+
+    def insert_compressed(
+        self,
+        key: List,
+        compressed_value: torch.Tensor,
+        selected_positions: torch.Tensor,
+    ):
+        """Insert compressed KV into the tree.
+
+        ``key`` is the full token-ID sequence (for prefix matching).
+        ``compressed_value`` holds only the selected KV-slot indices
+        (``len(compressed_value) <= len(key)``).
+        ``selected_positions`` maps each value entry to its position in
+        *key*-space (sorted, same length as ``compressed_value``).
+        """
+        if self.disable:
+            return
+
+        node = self.root_node
+        node.last_access_time = time.time()
+        remaining_key = list(key)
+        remaining_value = compressed_value
+        remaining_sel = selected_positions.clone()
+
+        while len(remaining_key) > 0 and remaining_key[0] in node.children:
+            child = node.children[remaining_key[0]]
+            child.last_access_time = time.time()
+            prefix_len = _key_match(child.key, remaining_key)
+
+            if prefix_len < len(child.key):
+                self._split_node(child.key, child, prefix_len)
+                # After split, re-enter the loop to match the new child
+                continue
+
+            # Full match of this child node — advance past it
+            mask = remaining_sel < prefix_len
+            n_vals = mask.sum().item()
+
+            remaining_key = remaining_key[prefix_len:]
+            remaining_value = remaining_value[n_vals:]
+            remaining_sel = remaining_sel[~mask] - prefix_len
+            node = child
+
+        if len(remaining_key) > 0:
+            new_node = TreeNode()
+            new_node.parent = node
+            new_node.key = remaining_key
+            new_node.value = remaining_value
+            new_node.position_offset = len(remaining_key) - len(remaining_value)
+            new_node.selected_positions = remaining_sel.clone()
+            node.children[remaining_key[0]] = new_node
+            self.evictable_size_ += len(remaining_value)
 
     def cache_finished_req(self, req: Req, token_ids: Optional[List[int]] = None):
         """Cache request when it finishes."""
@@ -143,10 +205,9 @@ class RadixCache(BasePrefixCache):
             return
 
         if getattr(req, "is_kv_compressed", False):
-            # Attention-only compression: tree already has the full KV cached
-            # (written by cache_unfinished_req before compression).
-            # Just free the req slot and decode-phase KV slots (those after compressed_seq_len).
-            # The compressed slots are shared with the tree — don't free them.
+            # Compressed KV is already stored in the tree (via insert_compressed).
+            # Free only the decode-phase KV slots (those after compressed_seq_len)
+            # and the request slot.  The compressed prefix slots are owned by the tree.
             decode_start = req.compressed_seq_len
             decode_end = decode_start + len(req.output_ids) - 1  # -1: first output was in prefill
             if decode_end > decode_start:
@@ -195,11 +256,19 @@ class RadixCache(BasePrefixCache):
 
         # The prefix indices could be updated, reuse it
         new_indices, new_last_node = self.match_prefix(token_ids)
-        assert len(new_indices) == len(token_ids)
-        self.req_to_token_pool.write(
-            (req.req_pool_idx, slice(len(req.prefix_indices), len(new_indices))),
-            new_indices[len(req.prefix_indices) :],
+        # For uncompressed nodes the lengths must match; for compressed
+        # nodes the matched-token count (stashed on node) must match.
+        matched_token_len = getattr(new_last_node, "_match_token_len", len(new_indices))
+        assert matched_token_len == len(token_ids), (
+            f"cache_unfinished_req: matched {matched_token_len} tokens "
+            f"but expected {len(token_ids)}"
         )
+        if len(new_indices) == len(token_ids):
+            # Normal (uncompressed) path
+            self.req_to_token_pool.write(
+                (req.req_pool_idx, slice(len(req.prefix_indices), len(new_indices))),
+                new_indices[len(req.prefix_indices) :],
+            )
 
         self.dec_lock_ref(req.last_node)
         self.inc_lock_ref(new_last_node)
@@ -276,6 +345,8 @@ class RadixCache(BasePrefixCache):
     def _match_prefix_helper(self, node: TreeNode, key: List):
         node.last_access_time = time.time()
         value = []
+        matched_key_len = 0
+        total_offset = 0
         while len(key) > 0 and key[0] in node.children.keys():
             child = node.children[key[0]]
             child.last_access_time = time.time()
@@ -283,13 +354,17 @@ class RadixCache(BasePrefixCache):
             if prefix_len < len(child.key):
                 new_node = self._split_node(child.key, child, prefix_len)
                 value.append(new_node.value)
+                matched_key_len += prefix_len
+                total_offset += new_node.position_offset
                 node = new_node
                 break
             else:
                 value.append(child.value)
+                matched_key_len += len(child.key)
+                total_offset += child.position_offset
                 node = child
                 key = key[prefix_len:]
-        return value, node
+        return value, node, matched_key_len, total_offset
 
     def _split_node(self, key, child: TreeNode, split_len: int):
         # new_node -> child
@@ -297,11 +372,30 @@ class RadixCache(BasePrefixCache):
         new_node.children = {key[split_len]: child}
         new_node.parent = child.parent
         new_node.lock_ref = child.lock_ref
-        new_node.key = child.key[:split_len]
-        new_node.value = child.value[:split_len]
+
+        if child.position_offset > 0:
+            # Compressed node: map key-space split_len to value-space
+            mask = child.selected_positions < split_len
+            value_split = mask.sum().item()
+
+            new_node.key = child.key[:split_len]
+            new_node.value = child.value[:value_split]
+            new_node.position_offset = split_len - value_split
+            new_node.selected_positions = child.selected_positions[:value_split].clone()
+
+            child.key = child.key[split_len:]
+            child.value = child.value[value_split:]
+            child.position_offset = len(child.key) - len(child.value)
+            child.selected_positions = (
+                child.selected_positions[value_split:] - split_len
+            ).clone()
+        else:
+            new_node.key = child.key[:split_len]
+            new_node.value = child.value[:split_len]
+            child.key = child.key[split_len:]
+            child.value = child.value[split_len:]
+
         child.parent = new_node
-        child.key = child.key[split_len:]
-        child.value = child.value[split_len:]
         new_node.parent.children[key[0]] = new_node
         return new_node
 
@@ -351,7 +445,7 @@ class RadixCache(BasePrefixCache):
             if v == node:
                 break
         del node.parent.children[k]
-        self.evictable_size_ -= len(node.key)
+        self.evictable_size_ -= len(node.value)
 
     def _total_size_helper(self):
         total_size = 0

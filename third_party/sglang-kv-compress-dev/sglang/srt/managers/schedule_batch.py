@@ -393,11 +393,28 @@ class Req:
     def init_next_round_input(self, tree_cache: Optional[BasePrefixCache] = None):
         self.fill_ids = self.origin_input_ids + self.output_ids
         if tree_cache is not None:
-            # tree cache is None if the prefix is not computed with tree cache.
             self.prefix_indices, self.last_node = tree_cache.match_prefix(
                 rid=self.rid, key=self.adjust_max_prefix_ids()
             )
-        self.extend_input_len = len(self.fill_ids) - len(self.prefix_indices)
+            # When the matched prefix contains compressed nodes, the number
+            # of KV slots (len(prefix_indices)) is less than the number of
+            # matched tokens.  Retrieve the true matched token count from
+            # the metadata stashed on last_node by match_prefix.
+            pos_offset = getattr(self.last_node, "_match_position_offset", 0)
+            matched_token_len = getattr(
+                self.last_node, "_match_token_len", len(self.prefix_indices)
+            )
+            if pos_offset > 0:
+                self.is_kv_compressed = True
+                self.compressed_seq_len = len(self.prefix_indices)
+                self.original_seq_len = matched_token_len
+                self._snapkv_position_offset = pos_offset
+                self._snapkv_seq_lens_fixed = True
+                self.extend_input_len = len(self.fill_ids) - matched_token_len
+            else:
+                self.extend_input_len = len(self.fill_ids) - len(self.prefix_indices)
+        else:
+            self.extend_input_len = len(self.fill_ids) - len(self.prefix_indices)
 
     def adjust_max_prefix_ids(self):
         self.fill_ids = self.origin_input_ids + self.output_ids
@@ -1291,16 +1308,15 @@ class ScheduleBatch:
             else:
                 self.sampling_info.grammars = None
 
-        # Build SnapKV position offset tensor for decode
+        # Build SnapKV position offset tensor (for both extend and decode)
         snapkv_pos_offsets = None
-        if self.forward_mode.is_decode_or_idle():
-            offsets = [
-                getattr(r, "_snapkv_position_offset", 0) for r in self.reqs
-            ]
-            if any(o != 0 for o in offsets):
-                snapkv_pos_offsets = torch.tensor(
-                    offsets, dtype=torch.int64, device=self.seq_lens.device
-                )
+        offsets = [
+            getattr(r, "_snapkv_position_offset", 0) for r in self.reqs
+        ]
+        if any(o != 0 for o in offsets):
+            snapkv_pos_offsets = torch.tensor(
+                offsets, dtype=torch.int64, device=self.seq_lens.device
+            )
 
         global bid
         bid += 1
