@@ -22,7 +22,7 @@ CONTINUE_MAX_TOKENS=500
 EXTRACT_MODE="regex"
 MAX_RETRIES=3
 
-MODEL_DEVICE="4"
+MODEL_DEVICE="1"
 
 # Set to 0 for full evaluation, >0 to limit for debugging
 MAX_PROBLEMS=0

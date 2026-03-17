@@ -296,14 +296,6 @@ class CudaGraphRunner:
             else True
         )
 
-        # Skip CUDA graph for KV-compressed requests to avoid numerical
-        # issues with non-contiguous KV indices in flashinfer CG wrapper.
-        # Set SGLANG_CG_SKIP_COMPRESS=1 to enable this safety check.
-        import os
-        if os.environ.get("SGLANG_CG_SKIP_COMPRESS"):
-            has_compressed = getattr(forward_batch, "_has_kv_compressed", False)
-            if has_compressed:
-                return False
         return is_bs_supported and is_encoder_lens_supported
 
     def capture(self):
