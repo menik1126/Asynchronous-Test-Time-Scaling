@@ -1295,12 +1295,14 @@ class Scheduler:
                     req.check_finished()
 
                     # Decide whether to compress before caching to tree
+                    kv_offset = getattr(req, "_snapkv_position_offset", 0)
                     should_compress = (
                         not req.finished()
                         and self.server_args.enable_kv_compress
                         and not getattr(req, "is_kv_compressed", False)
                         and req.seqlen >= self.server_args.kv_compress_min_seq_len
                         and req.sampling_params.max_new_tokens > 1
+                        and kv_offset == 0
                     )
 
                     if should_compress:
@@ -1312,12 +1314,9 @@ class Scheduler:
                         try:
                             obs_window = self.server_args.kv_compress_obs_window
                             kvcache = self.token_to_kv_pool_allocator.get_kvcache()
-                            # Use KV-space seq_len, not token-space req.seqlen.
-                            # For requests that matched a compressed prefix,
-                            # req.seqlen includes the position_offset gap where
-                            # req_to_token has stale data.
-                            kv_offset = getattr(req, "_snapkv_position_offset", 0)
-                            seq_len = req.seqlen - kv_offset
+                            # kv_offset == 0 is guaranteed by should_compress,
+                            # so KV-space length equals token-space length.
+                            seq_len = req.seqlen
 
                             budget = self.server_args.kv_compress_budget
                             if self.server_args.kv_compress_ratio > 0:
@@ -1368,24 +1367,8 @@ class Scheduler:
                                     req.req_pool_idx, :compressed_len
                                 ] = selected_kv
 
-                                # Convert selected from KV-space to token-space
-                                # for insert_compressed and req.selected_positions.
-                                if kv_offset > 0:
-                                    prefix_kv_len = prefix_len
-                                    prefix_sel = getattr(req, "_prefix_selected_positions", None)
-                                    if prefix_sel is None or len(prefix_sel) != prefix_kv_len:
-                                        prefix_sel = torch.arange(prefix_kv_len, dtype=torch.int64)
-                                    matched_token_len = prefix_kv_len + kv_offset
-                                    extend_len = seq_len - prefix_kv_len
-                                    extend_positions = torch.arange(
-                                        matched_token_len,
-                                        matched_token_len + extend_len,
-                                        dtype=torch.int64,
-                                    )
-                                    kv_to_token_map = torch.cat([prefix_sel, extend_positions])
-                                    selected_token_space = kv_to_token_map[selected.cpu()]
-                                else:
-                                    selected_token_space = selected.cpu()
+                                # kv_offset == 0 → selected is already in token-space
+                                selected_token_space = selected.cpu()
 
                                 # Insert compressed KV into tree (key=full tokens, value=compressed KV)
                                 token_ids = req.fill_ids
