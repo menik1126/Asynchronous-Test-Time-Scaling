@@ -134,7 +134,10 @@ class RadixCache(BasePrefixCache):
 
         if value is None:
             value = [x for x in key]
-        return self._insert_helper(self.root_node, key, value)
+        _prefix_key_len, prefix_value_len = self._insert_helper(
+            self.root_node, key, value
+        )
+        return prefix_value_len
 
     def insert_compressed(
         self,
@@ -481,20 +484,28 @@ class RadixCache(BasePrefixCache):
     def _insert_helper(self, node: TreeNode, key: List, value):
         node.last_access_time = time.time()
         if len(key) == 0:
-            return 0
+            return 0, 0
 
         total_prefix_length = 0
+        total_value_length = 0
         while len(key) > 0 and key[0] in node.children.keys():
             node = node.children[key[0]]
             node.last_access_time = time.time()
             prefix_len = _key_match(node.key, key)
-            total_prefix_length += prefix_len
-            key = key[prefix_len:]
-            value = value[prefix_len:]
 
             if prefix_len < len(node.key):
                 new_node = self._split_node(node.key, node, prefix_len)
                 node = new_node
+
+            # For compressed nodes, the node covers prefix_len tokens
+            # but holds fewer KV entries. Advance value by the node's
+            # actual value count (after potential split) to avoid
+            # over-consuming slots from the caller.
+            value_len = len(node.value)
+            total_prefix_length += prefix_len
+            total_value_length += value_len
+            key = key[prefix_len:]
+            value = value[value_len:]
 
         if len(key):
             new_node = TreeNode()
@@ -503,7 +514,7 @@ class RadixCache(BasePrefixCache):
             new_node.value = value
             node.children[key[0]] = new_node
             self.evictable_size_ += len(value)
-        return total_prefix_length
+        return total_prefix_length, total_value_length
 
     def _print_helper(self, node: TreeNode, indent: int):
         """Prints the radix tree in a human-readable format."""
