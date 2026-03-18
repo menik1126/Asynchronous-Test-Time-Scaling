@@ -271,7 +271,7 @@ class RadixCache(BasePrefixCache):
             # to scattered positions (from compressed prefix), the rest
             # are contiguous (from the extend portion).
             kv_pre_len = len(req.prefix_indices) if req.prefix_indices is not None else 0
-            extend_len = kv_len - kv_pre_len
+            extend_len = max(0, kv_len - kv_pre_len)
             # Prefix positions come from the tree's compressed node
             prefix_node_sel = getattr(req, "_prefix_selected_positions", None)
             if prefix_node_sel is not None and len(prefix_node_sel) == kv_pre_len:
@@ -280,10 +280,13 @@ class RadixCache(BasePrefixCache):
                 prefix_positions = torch.arange(kv_pre_len, dtype=torch.int64)
             # Extend positions are contiguous starting after matched_token_len
             matched_token_len = kv_pre_len + kv_offset
-            extend_positions = torch.arange(
-                matched_token_len, matched_token_len + extend_len, dtype=torch.int64
-            )
-            all_selected = torch.cat([prefix_positions, extend_positions])
+            if extend_len > 0:
+                extend_positions = torch.arange(
+                    matched_token_len, matched_token_len + extend_len, dtype=torch.int64
+                )
+                all_selected = torch.cat([prefix_positions, extend_positions])
+            else:
+                all_selected = prefix_positions
             self.insert_compressed(token_ids, kv_indices.clone(), all_selected)
         else:
             # Normal (uncompressed) path
@@ -497,15 +500,13 @@ class RadixCache(BasePrefixCache):
                 new_node = self._split_node(node.key, node, prefix_len)
                 node = new_node
 
-            # For compressed nodes, the node covers prefix_len tokens
-            # but holds fewer KV entries. Advance value by the node's
-            # actual value count (after potential split) to avoid
-            # over-consuming slots from the caller.
-            value_len = len(node.value)
+            # Track the tree's actual KV count (value-space) separately
+            # from the caller's value advancement (key-space, 1:1).
+            # For compressed nodes, len(node.value) < prefix_len.
             total_prefix_length += prefix_len
-            total_value_length += value_len
+            total_value_length += len(node.value)
             key = key[prefix_len:]
-            value = value[value_len:]
+            value = value[prefix_len:]
 
         if len(key):
             new_node = TreeNode()
