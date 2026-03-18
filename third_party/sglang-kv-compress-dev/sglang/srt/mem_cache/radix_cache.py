@@ -214,7 +214,11 @@ class RadixCache(BasePrefixCache):
                 token_ids = (req.origin_input_ids + req.output_ids)[:-1]
 
             compressed_len = req.compressed_seq_len
-            kv_offset = getattr(req, "_snapkv_position_offset", 0)
+            # Use original_seq_len (set at compression time) to compute offset,
+            # not _snapkv_position_offset which may have been altered by the
+            # decode seq_lens fix (off-by-one).
+            original_seq_len = getattr(req, "original_seq_len", compressed_len)
+            kv_offset = original_seq_len - compressed_len
             kv_len = len(token_ids) - kv_offset
             num_decode_to_cache = kv_len - compressed_len
 
@@ -225,9 +229,6 @@ class RadixCache(BasePrefixCache):
                 prefix_positions = getattr(
                     req, "selected_positions",
                     torch.arange(compressed_len, dtype=torch.int64),
-                )
-                original_seq_len = getattr(
-                    req, "original_seq_len", compressed_len + kv_offset
                 )
                 decode_positions = torch.arange(
                     original_seq_len,
