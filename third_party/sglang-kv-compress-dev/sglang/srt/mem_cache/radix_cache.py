@@ -204,17 +204,47 @@ class RadixCache(BasePrefixCache):
             return
 
         if getattr(req, "is_kv_compressed", False):
-            # Compressed KV is already stored in the tree (via insert_compressed).
-            # TODO(Bug2): Decode-phase KV is currently discarded. Future requests
-            # cannot reuse these tokens via prefix caching. Fix requires Bug 1
-            # (coordinate space mismatch) to be resolved first.
-            decode_start = req.compressed_seq_len
-            decode_end = decode_start + len(req.output_ids) - 1
-            if decode_end > decode_start:
-                decode_kv = self.req_to_token_pool.req_to_token[
-                    req.req_pool_idx, decode_start:decode_end
+            # The compressed prefix is already in the tree (via insert_compressed
+            # at compression time). Store the decode-phase KV as well so future
+            # requests can reuse them via prefix caching.
+            if token_ids is None:
+                token_ids = (req.origin_input_ids + req.output_ids)[:-1]
+
+            compressed_len = req.compressed_seq_len
+            kv_offset = getattr(req, "_snapkv_position_offset", 0)
+            kv_len = len(token_ids) - kv_offset
+            num_decode_to_cache = kv_len - compressed_len
+
+            if num_decode_to_cache > 0:
+                kv_indices = self.req_to_token_pool.req_to_token[
+                    req.req_pool_idx, :kv_len
                 ]
-                self.token_to_kv_pool_allocator.free(decode_kv)
+                prefix_positions = getattr(
+                    req, "selected_positions",
+                    torch.arange(compressed_len, dtype=torch.int64),
+                )
+                original_seq_len = getattr(
+                    req, "original_seq_len", compressed_len + kv_offset
+                )
+                decode_positions = torch.arange(
+                    original_seq_len,
+                    original_seq_len + num_decode_to_cache,
+                    dtype=torch.int64,
+                )
+                all_selected = torch.cat([prefix_positions, decode_positions])
+                self.insert_compressed(token_ids, kv_indices.clone(), all_selected)
+
+            # Free only the last decode KV slot (for the final output token
+            # excluded from token_ids by the [:-1] convention).
+            total_decode = len(req.output_ids) - 1
+            leftover_start = compressed_len + num_decode_to_cache
+            leftover_end = compressed_len + total_decode
+            if leftover_end > leftover_start:
+                leftover_kv = self.req_to_token_pool.req_to_token[
+                    req.req_pool_idx, leftover_start:leftover_end
+                ]
+                self.token_to_kv_pool_allocator.free(leftover_kv)
+
             self.req_to_token_pool.free(req.req_pool_idx)
             if req.last_node is not None:
                 self.dec_lock_ref(req.last_node)
