@@ -305,25 +305,32 @@ class RadixCache(BasePrefixCache):
         if token_ids is None:
             token_ids = req.fill_ids
 
-        kv_indices = self.req_to_token_pool.req_to_token[
-            req.req_pool_idx, : len(token_ids)
-        ]
+        kv_offset = getattr(req, "_snapkv_position_offset", 0)
 
-        # Radix Cache takes one ref in memory pool
-        new_prefix_len = self.insert(token_ids, kv_indices.clone())
-        self.token_to_kv_pool_allocator.free(
-            kv_indices[len(req.prefix_indices) : new_prefix_len]
-        )
+        if kv_offset == 0:
+            kv_indices = self.req_to_token_pool.req_to_token[
+                req.req_pool_idx, : len(token_ids)
+            ]
+
+            # Radix Cache takes one ref in memory pool
+            new_prefix_len = self.insert(token_ids, kv_indices.clone())
+            self.token_to_kv_pool_allocator.free(
+                kv_indices[len(req.prefix_indices) : new_prefix_len]
+            )
+        # else: kv_offset > 0 means this request matched a compressed prefix.
+        # The prefix KV is already in the tree. The small extend portion
+        # (typically 1-2 tokens) is not worth caching separately and would
+        # require insert_compressed with position mapping. Skip the insert;
+        # just update prefix_indices below via match_prefix.
 
         # The prefix indices could be updated, reuse it
         new_indices, new_last_node = self.match_prefix(token_ids)
-        # For uncompressed nodes the lengths must match; for compressed
-        # nodes the matched-token count (stashed on node) must match.
         matched_token_len = getattr(new_last_node, "_match_token_len", len(new_indices))
-        assert matched_token_len == len(token_ids), (
-            f"cache_unfinished_req: matched {matched_token_len} tokens "
-            f"but expected {len(token_ids)}"
-        )
+        if kv_offset == 0:
+            assert matched_token_len == len(token_ids), (
+                f"cache_unfinished_req: matched {matched_token_len} tokens "
+                f"but expected {len(token_ids)}"
+            )
         if len(new_indices) == len(token_ids):
             # Normal (uncompressed) path
             self.req_to_token_pool.write(
