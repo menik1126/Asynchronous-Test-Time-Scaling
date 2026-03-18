@@ -205,10 +205,11 @@ class RadixCache(BasePrefixCache):
 
         if getattr(req, "is_kv_compressed", False):
             # Compressed KV is already stored in the tree (via insert_compressed).
-            # Free only the decode-phase KV slots (those after compressed_seq_len)
-            # and the request slot.  The compressed prefix slots are owned by the tree.
+            # TODO(Bug2): Decode-phase KV is currently discarded. Future requests
+            # cannot reuse these tokens via prefix caching. Fix requires Bug 1
+            # (coordinate space mismatch) to be resolved first.
             decode_start = req.compressed_seq_len
-            decode_end = decode_start + len(req.output_ids) - 1  # -1: first output was in prefill
+            decode_end = decode_start + len(req.output_ids) - 1
             if decode_end > decode_start:
                 decode_kv = self.req_to_token_pool.req_to_token[
                     req.req_pool_idx, decode_start:decode_end

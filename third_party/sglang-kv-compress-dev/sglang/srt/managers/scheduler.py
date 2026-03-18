@@ -1325,7 +1325,8 @@ class Scheduler:
                                 budget = max(budget, adaptive_budget)
 
                             attn_weights = compute_obs_attn_scores(
-                                req, self.req_to_token_pool, kvcache, obs_window=obs_window,
+                                req, self.req_to_token_pool, kvcache,
+                                obs_window=obs_window, kv_seq_len=seq_len,
                             )
                             if attn_weights is not None:
                                 protect_len = self.server_args.kv_compress_protect_prefix
@@ -1333,6 +1334,7 @@ class Scheduler:
                                 if isinstance(custom, dict) and 'snapkv_protect_len' in custom:
                                     protect_len = custom['snapkv_protect_len']
 
+                                # selected is in KV-space [0, seq_len)
                                 selected = snapkv_select_positions(
                                     attn_weights, seq_len,
                                     budget=budget,
@@ -1366,10 +1368,29 @@ class Scheduler:
                                     req.req_pool_idx, :compressed_len
                                 ] = selected_kv
 
+                                # Convert selected from KV-space to token-space
+                                # for insert_compressed and req.selected_positions.
+                                if kv_offset > 0:
+                                    prefix_kv_len = prefix_len
+                                    prefix_sel = getattr(req, "_prefix_selected_positions", None)
+                                    if prefix_sel is None or len(prefix_sel) != prefix_kv_len:
+                                        prefix_sel = torch.arange(prefix_kv_len, dtype=torch.int64)
+                                    matched_token_len = prefix_kv_len + kv_offset
+                                    extend_len = seq_len - prefix_kv_len
+                                    extend_positions = torch.arange(
+                                        matched_token_len,
+                                        matched_token_len + extend_len,
+                                        dtype=torch.int64,
+                                    )
+                                    kv_to_token_map = torch.cat([prefix_sel, extend_positions])
+                                    selected_token_space = kv_to_token_map[selected.cpu()]
+                                else:
+                                    selected_token_space = selected.cpu()
+
                                 # Insert compressed KV into tree (key=full tokens, value=compressed KV)
                                 token_ids = req.fill_ids
                                 self.tree_cache.insert_compressed(
-                                    token_ids, selected_kv.clone(), selected,
+                                    token_ids, selected_kv.clone(), selected_token_space,
                                 )
                                 # Lock the tree node so compressed KV won't be evicted
                                 _, new_last_node = self.tree_cache.match_prefix(token_ids)
@@ -1382,7 +1403,7 @@ class Scheduler:
                                 req.is_kv_compressed = True
                                 req.compressed_seq_len = compressed_len
                                 req.original_seq_len = seq_len
-                                req.selected_positions = selected.cpu()
+                                req.selected_positions = selected_token_space
                                 req._snapkv_position_offset = seq_len - compressed_len
                                 req._snapkv_seq_lens_fixed = False
 

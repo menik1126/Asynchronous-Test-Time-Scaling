@@ -482,5 +482,245 @@ class TestATTSEdgeCases(unittest.TestCase):
         self.assertNotEqual(node_a.id, node_b.id)
 
 
+class TestBug2FixDecodeTokensCached(unittest.TestCase):
+    """Verify that compressed requests' decode tokens are now stored in the tree.
+
+    Before fix: cache_finished_req (compressed path) only freed decode KV.
+    After fix: decode KV is stored in tree via insert_compressed.
+    """
+
+    def test_decode_tokens_visible_in_tree(self):
+        """After a compressed request finishes, its decode tokens should be
+        matchable by a subsequent request's prefix matching."""
+        cache, rtp, alloc = make_env()
+
+        # --- Step 1: Simulate Turn 0 DRAFT (uncompressed, stores all in tree) ---
+        draft0_tokens = list(range(1000, 1500))  # 500 draft tokens
+        turn0_full = PREFIX_TOKENS + draft0_tokens  # 150 + 500 = 650
+
+        # Insert as uncompressed (like a normal DRAFT that finishes without compression)
+        kv_full = alloc.alloc(len(turn0_full))
+        cache.insert(turn0_full, kv_full.clone())
+
+        # --- Step 2: Simulate Turn 0 CONTINUE (compressed) ---
+        continue0_tokens = list(range(2000, 2500))  # 500 continue tokens
+        continue_input = turn0_full  # prompt for continue = sys+q+draft0
+
+        # Simulate: match prefix, extend 1 token, compress, then decode 500 tokens
+        req_pool_C = rtp.alloc()
+        # After match_prefix: prefix = turn0_full ≈ 649 tokens matched
+        # Extend 1 token → compression triggers
+        # For simplicity, simulate compression of the full prompt portion
+        prompt_len = len(continue_input)
+        compress_selected = torch.arange(0, prompt_len, 2, dtype=torch.int64)  # keep every other
+        compressed_len = len(compress_selected)
+        prefix_kv = kv_full[compress_selected]
+
+        # Write compressed prefix to req_to_token
+        rtp.req_to_token[req_pool_C, :compressed_len] = prefix_kv
+
+        # Simulate decode: allocate KV for 500 decode tokens
+        decode_kv = alloc.alloc(len(continue0_tokens))
+        rtp.req_to_token[req_pool_C, compressed_len:compressed_len + len(continue0_tokens)] = decode_kv
+
+        # Build a FakeReq that looks like a compressed request after decode
+        from dataclasses import dataclass
+        req_C = FakeReq(
+            rid="continue0",
+            origin_input_ids=continue_input,
+            output_ids=[9999] + list(continue0_tokens) + [8888],  # prefill_out + decode_outs + final
+        )
+        req_C.is_kv_compressed = True
+        req_C.compressed_seq_len = compressed_len
+        req_C.original_seq_len = prompt_len  # token-space length at compression time
+        req_C._snapkv_position_offset = prompt_len - compressed_len
+        req_C.selected_positions = compress_selected
+        req_C.req_pool_idx = req_pool_C
+
+        # Insert compressed into tree first (simulating what scheduler does at compression time)
+        cache.insert_compressed(continue_input, prefix_kv.clone(), compress_selected)
+        _, node = cache.match_prefix(continue_input)
+        cache.inc_lock_ref(node)
+        req_C.last_node = node
+        req_C.prefix_indices = prefix_kv
+
+        # --- Step 3: Call cache_finished_req (THE FIX) ---
+        cache.cache_finished_req(req_C)
+
+        # --- Step 4: Verify decode tokens are in the tree ---
+        # Build the token sequence that includes decode tokens
+        # token_ids = (origin_input_ids + output_ids)[:-1]
+        #           = continue_input + [9999] + continue0_tokens
+        expected_cached = continue_input + [9999] + list(continue0_tokens)
+
+        val, node = cache.match_prefix(expected_cached)
+        matched_len = getattr(node, "_match_token_len", len(val))
+
+        print(f"\n  Expected cached tokens: {len(expected_cached)}")
+        print(f"  Matched tokens: {matched_len}")
+        print(f"  Matched KV entries: {len(val)}")
+
+        # Before fix: matched_len would be ≈ len(continue_input) (only compressed prefix)
+        # After fix: matched_len should be ≈ len(expected_cached) (includes decode tokens)
+        self.assertGreater(matched_len, len(continue_input),
+            f"Decode tokens NOT in tree! Matched {matched_len} tokens but "
+            f"expected > {len(continue_input)} (input) + some decode tokens")
+        print(f"  ✓ Decode tokens are in the tree! ({matched_len - len(continue_input)} extra tokens matched)")
+
+    def test_next_turn_prefix_hit_with_decode_tokens(self):
+        """Turn 1 DRAFT should be able to prefix-match Turn 0 CONTINUE's decode output."""
+        cache, rtp, alloc = make_env()
+
+        # Turn 0 DRAFT output (uncompressed in tree)
+        draft0 = list(range(1000, 1400))
+        turn0_tokens = PREFIX_TOKENS + draft0  # 550 tokens
+        kv0 = alloc.alloc(len(turn0_tokens))
+        cache.insert(turn0_tokens, kv0.clone())
+
+        # Turn 0 CONTINUE: compresses, decodes continue0, finishes
+        continue0 = list(range(2000, 2300))  # 300 continue tokens
+        prompt_C = turn0_tokens
+        compress_sel = torch.arange(0, len(prompt_C), 2, dtype=torch.int64)
+        comp_len = len(compress_sel)
+        prefix_kv = kv0[compress_sel]
+
+        req_pool = rtp.alloc()
+        rtp.req_to_token[req_pool, :comp_len] = prefix_kv
+        cont_kv = alloc.alloc(len(continue0))
+        rtp.req_to_token[req_pool, comp_len:comp_len + len(continue0)] = cont_kv
+
+        req = FakeReq(
+            rid="cont0", origin_input_ids=prompt_C,
+            output_ids=[9999] + list(continue0) + [8888],
+        )
+        req.is_kv_compressed = True
+        req.compressed_seq_len = comp_len
+        req.original_seq_len = len(prompt_C)
+        req._snapkv_position_offset = len(prompt_C) - comp_len
+        req.selected_positions = compress_sel
+        req.req_pool_idx = req_pool
+
+        cache.insert_compressed(prompt_C, prefix_kv.clone(), compress_sel)
+        _, node = cache.match_prefix(prompt_C)
+        cache.inc_lock_ref(node)
+        req.last_node = node
+        req.prefix_indices = prefix_kv
+
+        cache.cache_finished_req(req)
+
+        # Turn 1 DRAFT: prompt = sys + q + draft0 + continue0 + draft1_start
+        draft1_start = [7777]
+        turn1_input = turn0_tokens + [9999] + list(continue0) + draft1_start
+        req1 = FakeReq(rid="draft1", origin_input_ids=turn1_input)
+        req1.init_next_round_input(cache)
+
+        matched = getattr(req1.last_node, "_match_token_len", len(req1.prefix_indices))
+        expected_match = len(turn0_tokens) + 1 + len(continue0)  # everything except draft1_start
+
+        print(f"\n  Turn 1 DRAFT input: {len(turn1_input)} tokens")
+        print(f"  Expected prefix match: ≥{expected_match - 1} tokens")
+        print(f"  Actual prefix match: {matched} tokens")
+        print(f"  extend_input_len: {req1.extend_input_len}")
+
+        # Before fix: matched ≈ len(turn0_tokens) (only draft0, ~550)
+        # After fix: matched ≈ expected_match (draft0 + continue0, ~851)
+        self.assertGreater(matched, len(turn0_tokens) + 1,
+            f"Turn 1 should match beyond draft0! Got {matched}, expected >{len(turn0_tokens) + 1}")
+        print(f"  ✓ Turn 1 matches {matched - len(turn0_tokens)} tokens beyond draft0 (continue0 tokens)")
+
+
+class TestBug1ReproCompressAfterCompressedPrefix(unittest.TestCase):
+    """Reproduce Bug 1: compress a request that matched a compressed prefix.
+
+    Scenario:
+      1. Request A: prefill 600 tokens → compress to 400 → insert_compressed → decode 300 → finish
+         Tree now has: uncompressed node (150 shared prefix) + compressed node (450 tokens → ~250 KV)
+      2. Request B: prompt = same 600 tokens + A's 300 decode tokens + 1 new token
+         match_prefix → matches compressed node → kv_offset > 0
+         Should trigger compression → Bug 1: selected positions in KV-space
+         but insert_compressed expects token-space
+    """
+
+    def test_bug1_coordinate_space_mismatch(self):
+        cache, rtp, alloc = make_env()
+
+        # --- Step 1: Request A generates and compresses ---
+        draft_tokens = list(range(1000, 1450))  # 450 draft tokens
+        turn0_tokens = PREFIX_TOKENS + draft_tokens  # 150 + 450 = 600
+
+        # Simulate prefill + compress for Request A
+        req_pool_A, comp_len_A, selected_A, node_A = simulate_prefill_and_compress(
+            cache, alloc, rtp, turn0_tokens, budget_ratio=0.5
+        )
+        print(f"\nStep 1: Request A compressed {len(turn0_tokens)} -> {comp_len_A} tokens")
+        print(f"  selected_A positions: min={selected_A.min().item()}, max={selected_A.max().item()}, count={len(selected_A)}")
+
+        # Simulate Request A's decode phase: 300 output tokens
+        decode_output_ids = list(range(5000, 5300))
+
+        # Now simulate cache_finished_req for A (compressed path):
+        # - Free decode KV (not stored in tree)
+        # - Only the compressed prefix remains in tree
+        cache.dec_lock_ref(node_A)
+        rtp.free(req_pool_A)
+
+        # --- Step 1b: Store A's full output in tree (simulating Bug 2 FIX) ---
+        # Without this, Request B can't match A's decode tokens and Bug 1 won't trigger.
+        # We manually insert A's full sequence (prefix + draft + decode) into tree.
+        full_A_tokens = turn0_tokens + decode_output_ids  # 600 + 300 = 900 tokens
+        full_A_kv = alloc.alloc(len(full_A_tokens))
+        # Insert using insert_compressed with the known compressed positions
+        # The first 600 tokens map to compressed positions, last 300 are contiguous
+        prefix_positions = selected_A.clone()
+        decode_positions = torch.arange(len(turn0_tokens), len(full_A_tokens), dtype=torch.int64)
+        all_positions = torch.cat([prefix_positions, decode_positions])
+        combined_kv = alloc.alloc(comp_len_A + len(decode_output_ids))
+        cache.insert_compressed(full_A_tokens, combined_kv, all_positions)
+        print(f"\nStep 1b: Inserted full A tokens into tree ({len(full_A_tokens)} tokens, {len(combined_kv)} KV)")
+
+        # --- Step 2: Request B matches compressed prefix and triggers compression ---
+        continue_tokens = list(range(6000, 6200))  # 200 new tokens
+        request_B_input = full_A_tokens + continue_tokens  # 900 + 200 = 1100 tokens
+
+        req_B = FakeReq(rid="reqB", origin_input_ids=request_B_input, output_ids=[])
+        req_B.init_next_round_input(cache)
+
+        prefix_kv_len = len(req_B.prefix_indices)
+        kv_offset = req_B._snapkv_position_offset
+        matched_token_len = getattr(req_B.last_node, "_match_token_len", prefix_kv_len)
+
+        print(f"\nStep 2: Request B")
+        print(f"  fill_ids length: {len(req_B.fill_ids)}")
+        print(f"  prefix_kv_len (KV indices): {prefix_kv_len}")
+        print(f"  matched_token_len: {matched_token_len}")
+        print(f"  kv_offset: {kv_offset}")
+        print(f"  extend_input_len: {req_B.extend_input_len}")
+
+        # KEY CHECK: Does Request B have kv_offset > 0?
+        if kv_offset > 0:
+            print(f"\n  ★ BUG 1 TRIGGER CONDITION MET: kv_offset={kv_offset} > 0")
+            print(f"  If SnapKV compresses now, selected positions would be in KV-space [0, {prefix_kv_len + req_B.extend_input_len - 1}]")
+            print(f"  But insert_compressed expects token-space [0, {len(request_B_input) - 1}]")
+            print(f"  The mismatch = {kv_offset} positions")
+
+            # Simulate what compression would do:
+            kv_seq_len = len(request_B_input) - kv_offset  # KV-space length
+            # SnapKV would produce selected positions in [0, kv_seq_len-1]
+            simulated_selected = torch.arange(0, kv_seq_len, 2)  # keep every other
+            print(f"\n  Simulated compression: kv_seq_len={kv_seq_len}, keeping {len(simulated_selected)} positions")
+            print(f"  Max selected position (KV-space): {simulated_selected.max().item()}")
+            print(f"  Token-space length: {len(request_B_input)}")
+            print(f"  ★ BUG: insert_compressed will compare selected < node.key_len")
+            print(f"    node.key_len is in TOKEN space (~900)")
+            print(f"    but selected max is in KV space ({simulated_selected.max().item()})")
+            print(f"    Since {simulated_selected.max().item()} < 900, mask eats ALL values at first node!")
+        else:
+            print(f"\n  kv_offset=0, Bug 1 condition NOT met")
+
+        self.assertGreater(kv_offset, 0,
+            "Expected kv_offset > 0 to trigger Bug 1. "
+            "If this fails, the compressed node was not matched.")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

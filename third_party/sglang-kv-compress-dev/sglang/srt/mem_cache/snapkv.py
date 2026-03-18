@@ -30,6 +30,7 @@ def compute_obs_attn_scores(
     layer_ids: Optional[List[int]] = None,
     cached_q: Optional[dict] = None,
     req_index: int = 0,
+    kv_seq_len: Optional[int] = None,
 ) -> torch.Tensor:
     """Compute attention scores from the last obs_window tokens to all tokens.
 
@@ -48,11 +49,17 @@ def compute_obs_attn_scores(
             (from RadixAttention._cache_obs_q). Each tensor has shape
             [obs_tokens, num_q_heads, head_dim].
         req_index: Index of the request in the batch (for cached_q lookup).
+        kv_seq_len: Override for the number of valid KV entries. When the
+            request matched a compressed prefix, the KV count is less than
+            the token count. If None, falls back to token-space length.
 
     Returns:
         Attention weights tensor of shape [num_kv_heads, obs_window, seq_len].
     """
-    seq_len = len(req.origin_input_ids) + len(req.output_ids)
+    if kv_seq_len is not None:
+        seq_len = kv_seq_len
+    else:
+        seq_len = len(req.origin_input_ids) + len(req.output_ids)
     if seq_len <= obs_window:
         return None
 
